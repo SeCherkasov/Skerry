@@ -44,7 +44,7 @@ fun main() = application {
     // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
     val hostStore = FileHostStore(dir.resolve("hosts.json"))
     val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
-    // Локальный зашифрованный vault: пока в граф добавлен, UI мастер-пароля — следующий шаг.
+    // Локальный зашифрованный vault: гейт мастер-пароля (App → VaultGate) закрывает им весь UI.
     val vault = FileVault(dir.resolve("vault.json"), LibsodiumVaultCrypto(), deviceId(dir))
     val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault)
     Window(

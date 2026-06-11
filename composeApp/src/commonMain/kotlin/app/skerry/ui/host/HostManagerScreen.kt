@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,6 +65,7 @@ fun HostManagerScreen(
     transport: SshTransport,
     hosts: HostManagerController,
     modifier: Modifier = Modifier,
+    onLock: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val connection = remember(transport) { ConnectionController(transport, scope) }
@@ -88,6 +90,7 @@ fun HostManagerScreen(
             enabled = !sessionBusy,
             onSelect = { id -> selectedId = id; editing = null },
             onNew = { selectedId = null; editing = HostDraft(label = "", address = "", username = "") },
+            onLock = onLock,
         )
         Box(Modifier.fillMaxHeight().width(1.dp).background(SkerryColors.lineStrong))
 
@@ -172,6 +175,7 @@ private fun HostSidebar(
     enabled: Boolean,
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
+    onLock: (() -> Unit)?,
 ) {
     Column(Modifier.width(248.dp).fillMaxHeight().background(SkerryColors.deep2)) {
         Text(
@@ -213,9 +217,20 @@ private fun HostSidebar(
         TextButton(
             onClick = onNew,
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth().padding(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Text("+ Новый хост")
+        }
+        // Кнопка ручной блокировки vault видна только когда гейт активен (onLock != null).
+        // Заблокировать можно и при живой сессии — teardown сделает DisposableEffect content.
+        if (onLock != null) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(1.dp).background(SkerryColors.line))
+            TextButton(
+                onClick = onLock,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text("Заблокировать хранилище", color = SkerryColors.textDim)
+            }
         }
     }
 }
