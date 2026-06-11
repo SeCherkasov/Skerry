@@ -52,6 +52,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
         val desktopMain by getting {
             dependencies {
@@ -60,6 +61,11 @@ kotlin {
             }
         }
     }
+}
+
+compose.resources {
+    publicResClass = false
+    packageOfResClass = "app.skerry.ui.generated.resources"
 }
 
 compose.desktop {
