@@ -2,6 +2,7 @@ package app.skerry.ui
 
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
 
@@ -18,4 +19,6 @@ data class AppDependencies(
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
     val identities: IdentityManagerController? = null,
+    /** Биометрическая разблокировка vault; `null` — платформа без биометрии (desktop MVP). */
+    val biometrics: VaultBiometrics? = null,
 )

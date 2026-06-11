@@ -8,6 +8,8 @@ plugins {
 dependencies {
     implementation(projects.composeApp)
     implementation(libs.androidx.activity.compose)
+    // FragmentActivity — хост биометрического промпта (androidx.biometric)
+    implementation(libs.androidx.fragment)
 }
 
 android {

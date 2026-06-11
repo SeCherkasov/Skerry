@@ -52,6 +52,10 @@ kotlin {
             // in-memory FileSystem для тестов FileVault без реальной ФС
             implementation(libs.okio.fakefilesystem)
         }
+        androidMain.dependencies {
+            // BiometricPrompt + CryptoObject для AndroidBiometricKeyStore (Keystore-огороженный ключ)
+            implementation(libs.androidx.biometric)
+        }
         val desktopMain by getting {
             dependencies {
                 implementation(libs.sshj)
