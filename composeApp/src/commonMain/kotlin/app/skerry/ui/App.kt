@@ -1,6 +1,8 @@
 package app.skerry.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,6 +16,7 @@ import app.skerry.shared.vault.Vault
 import app.skerry.ui.connection.ConnectionScreen
 import app.skerry.ui.host.HostManagerScreen
 import app.skerry.ui.theme.SkerryTheme
+import app.skerry.ui.vault.VaultBiometricSettings
 import app.skerry.ui.vault.VaultGate
 
 /**
@@ -32,7 +35,7 @@ fun App(deps: AppDependencies = AppDependencies()) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             val vault = deps.vault
             if (vault != null) {
-                VaultGate(vault) { onLock -> MainContent(deps, onLock) }
+                VaultGate(vault, deps.biometrics) { onLock -> MainContent(deps, onLock) }
             } else {
                 MainContent(deps, onLock = null)
             }
@@ -51,12 +54,20 @@ private fun MainContent(deps: AppDependencies, onLock: (() -> Unit)?) {
     } else if (transport != null) {
         ConnectionScreen(transport)
     } else {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // Транспорта/менеджера хостов на этой платформе ещё нет (мобильный паритет в работе):
+        // показываем плейсхолдер, а при наличии биометрии — настройки vault (тумблер + lock),
+        // чтобы за гейтом было управление биометрией до прихода полноценного мобильного UI.
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
             Text(
                 text = "Skerry · $platformName",
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.headlineMedium,
             )
+            deps.biometrics?.let { VaultBiometricSettings(it, onLock) }
         }
     }
 }

@@ -7,6 +7,10 @@ android-minSdk = "24"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
 androidx-lifecycle = "2.10.0"
+# биометрия Android: BiometricPrompt + CryptoObject (огороженный Keystore-ключ)
+androidx-biometric = "1.1.0"
+# FragmentActivity — требование androidx.biometric для хоста промпта
+androidx-fragment = "1.8.5"
 composeMultiplatform = "1.11.1"
 kotlin = "2.3.21"
 # material3 версионируется отдельно от CMP; стабильного релиза линейки 1.11 ещё нет
@@ -27,6 +31,8 @@ atomicfu = "0.32.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidx-fragment" }
 androidx-lifecycle-runtimeCompose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-viewmodelCompose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }

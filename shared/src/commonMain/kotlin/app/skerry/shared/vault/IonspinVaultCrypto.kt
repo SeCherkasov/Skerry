@@ -13,10 +13,17 @@ import com.ionspin.kotlin.crypto.util.LibsodiumRandom
 
 /**
  * Инициализирует нативный libsodium; должна отработать до создания/использования
- * [IonspinVaultCrypto]. Идемпотентна. Держит ionspin внутренней деталью ядра — точка входа
- * приложения зовёт эту функцию, а не ionspin напрямую (см. [IonspinVaultCrypto]).
+ * [IonspinVaultCrypto]. Идемпотентна: повторный вызов в уже инициализированном процессе — no-op.
+ * Это важно на Android/Native — там `LibsodiumInitializer.initialize()` при повторном `sodium_init`
+ * бросает (код возврата 1 = «уже инициализировано»), что роняло пересоздание Activity (поворот/
+ * возврат из фона). Держит ionspin внутренней деталью ядра — точка входа зовёт эту функцию, а не
+ * ionspin напрямую (см. [IonspinVaultCrypto]).
  */
-suspend fun initializeVaultCrypto() = LibsodiumInitializer.initialize()
+suspend fun initializeVaultCrypto() {
+    if (!LibsodiumInitializer.isInitialized()) {
+        LibsodiumInitializer.initialize()
+    }
+}
 
 /**
  * Единая реализация [VaultCrypto] на ionspin multiplatform-crypto-libsodium-bindings — один
