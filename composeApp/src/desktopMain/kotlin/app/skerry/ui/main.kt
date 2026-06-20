@@ -74,7 +74,11 @@ fun main() {
             // в стиле макета), чип «Unlocked» реально запирает хранилище. Остальные бэкенды
             // (SSH/SFTP/forward/known-hosts из `deps`) подключаются к экранам следующими слайсами.
             app.skerry.ui.theme.SkerryTheme {
-                app.skerry.ui.design.DesktopDesignApp(vault = deps.vault, biometrics = deps.biometrics)
+                app.skerry.ui.design.DesktopDesignApp(
+                    vault = deps.vault,
+                    biometrics = deps.biometrics,
+                    hosts = deps.hosts,
+                )
             }
         }
     }

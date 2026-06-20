@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.host.HostFolder
+import app.skerry.ui.host.groupHostsByFolder
 
 /** Терминальный view: hosts-sidebar + main (toolbar, панели, AI-bar) + info-panel. */
 @Composable
@@ -92,7 +95,15 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 Txt("HOSTS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
                 Sym("create_new_folder", size = 14.sp, color = D.faint)
             }
-            HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
+            // Живой каталог из HostManagerController, если подан (за гейтом vault); иначе мок-данные
+            // макета (путь офскрин-рендера/превью).
+            val liveHosts = LocalHosts.current
+            if (liveHosts != null) {
+                val folders = remember(liveHosts.hosts) { groupHostsByFolder(liveHosts.hosts) }
+                folders.forEach { folder -> LiveHostFolder(folder, state, mono) }
+            } else {
+                HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
+            }
             Txt(
                 "RECENT",
                 color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
@@ -114,45 +125,91 @@ private fun HostsSidebar(state: DesktopDesignState) {
     }
 }
 
+/** Заголовок папки хостов: стрелка + иконка + имя + счётчик. */
+@Composable
+private fun FolderHeader(name: String, count: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Sym("expand_more", size = 16.sp, color = D.faint)
+        Sym("folder_open", size = 15.sp, color = D.cyanBright)
+        Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+            Txt(count.toString(), color = D.faint, size = 10.sp)
+        }
+    }
+}
+
 @Composable
 private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: FontFamily) {
     Column(Modifier.padding(bottom = 2.dp)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Sym("expand_more", size = 16.sp, color = D.faint)
-            Sym("folder_open", size = 15.sp, color = D.cyanBright)
-            Txt(group.name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-                Txt(group.hosts.size.toString(), color = D.faint, size = 10.sp)
-            }
-        }
+        FolderHeader(group.name, group.hosts.size)
         Column(Modifier.padding(start = 22.dp)) {
             group.hosts.forEach { host -> HostRow(host, state, mono) }
         }
     }
 }
 
+/** Живая папка каталога: те же визуалы, но из [HostFolder] поверх [HostManagerController]. */
+@Composable
+private fun LiveHostFolder(folder: HostFolder, state: DesktopDesignState, mono: FontFamily) {
+    Column(Modifier.padding(bottom = 2.dp)) {
+        FolderHeader(folder.name, folder.hosts.size)
+        Column(Modifier.padding(start = 22.dp)) {
+            folder.hosts.forEach { host ->
+                val onClick = remember(host.id) { { state.selectHost(host.id) } }
+                HostEntryRow(
+                    label = host.label,
+                    selected = state.selectedHost == host.id,
+                    dot = D.faint, // live-статус подключения появится со слайсом соединения
+                    badge = null,
+                    onClick = onClick,
+                    mono = mono,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily) {
-    val active = state.selectedHost == host.name
+    HostEntryRow(
+        label = host.name,
+        selected = state.selectedHost == host.name,
+        dot = host.status.color,
+        badge = host.badge,
+        onClick = { state.selectHost(host.name) },
+        mono = mono,
+    )
+}
+
+/** Общая строка хоста в сайдбаре (мок и живой каталог): точка статуса + имя + опц. бейдж. */
+@Composable
+private fun HostEntryRow(
+    label: String,
+    selected: Boolean,
+    dot: Color,
+    badge: String?,
+    onClick: () -> Unit,
+    mono: FontFamily,
+) {
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
-            .background(if (active) D.cyan10 else Color.Transparent)
-            .clickable { state.selectHost(host.name) }
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Dot(host.status.color)
-        Txt(host.name, color = if (active) D.cyanBright else D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
-        if (host.badge != null) {
-            val strict = host.badge == "STRICT"
-            Badge(host.badge, bg = if (strict) D.strictBg else D.devBg, fg = if (strict) D.strictFg else D.moss)
+        Dot(dot)
+        Txt(label, color = if (selected) D.cyanBright else D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+        if (badge != null) {
+            val strict = badge == "STRICT"
+            Badge(badge, bg = if (strict) D.strictBg else D.devBg, fg = if (strict) D.strictFg else D.moss)
         }
     }
 }

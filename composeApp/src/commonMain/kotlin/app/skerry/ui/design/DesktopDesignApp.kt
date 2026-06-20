@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.vault.VaultGate
 
 /**
@@ -49,13 +50,14 @@ fun DesktopDesignApp(
     state: DesktopDesignState = remember { DesktopDesignState() },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
+    hosts: HostManagerController? = null,
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
-    CompositionLocalProvider(LocalFonts provides fonts) {
+    CompositionLocalProvider(LocalFonts provides fonts, LocalHosts provides hosts) {
         if (vault != null) {
             VaultGate(
                 vault = vault,
