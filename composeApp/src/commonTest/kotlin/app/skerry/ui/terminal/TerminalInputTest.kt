@@ -152,6 +152,47 @@ class TerminalInputTest {
     }
 
     @Test
+    fun `ctrl letter works when desktop delivers the control char as codePoint`() {
+        // Реальный Compose Desktop: AWT отдаёт Ctrl+C с keyChar 0x03 → utf16CodePoint == 3.
+        // Раньше это падало в null (3 не в 'A'..'Z'/'a'..'z'), и Ctrl-комбо не работали вживую.
+        assertEquals(listOf(0x03), codes(mapTerminalKey(Key.C, ctrl = true, codePoint = 3)))
+        assertEquals(listOf(0x1a), codes(mapTerminalKey(Key.Z, ctrl = true, codePoint = 26)))
+    }
+
+    @Test
+    fun `ctrl letter derives the control byte from the physical key`() {
+        // Когда AWT не отдаёт символ (CHAR_UNDEFINED 0xFFFF), опираемся на физическую клавишу.
+        assertEquals(listOf(0x03), codes(mapTerminalKey(Key.C, ctrl = true, codePoint = 0xFFFF)))
+        assertEquals(listOf(0x04), codes(mapTerminalKey(Key.D, ctrl = true, codePoint = 0xFFFF)))
+    }
+
+    @Test
+    fun `ctrl bracket symbols send their control bytes`() {
+        assertEquals(listOf(0x1b), codes(mapTerminalKey(Key.LeftBracket, ctrl = true, codePoint = 0x1b))) // Ctrl+[ = ESC
+        assertEquals(listOf(0x1c), codes(mapTerminalKey(Key.Backslash, ctrl = true, codePoint = 0x1c)))   // Ctrl+\ = FS
+        assertEquals(listOf(0x1d), codes(mapTerminalKey(Key.RightBracket, ctrl = true, codePoint = 0x1d)))// Ctrl+] = GS
+    }
+
+    @Test
+    fun `bare alt produces nothing (no garbage glyph)`() {
+        // AWT отдаёт одинокие модификаторы с keyChar CHAR_UNDEFINED (0xFFFF) — это НЕ текст.
+        assertNull(mapTerminalKey(Key.AltLeft, ctrl = false, alt = true, codePoint = 0xFFFF))
+        assertNull(mapTerminalKey(Key.AltRight, ctrl = false, alt = true, codePoint = 0xFFFF))
+    }
+
+    @Test
+    fun `CHAR_UNDEFINED codepoint is never sent as a printable char`() {
+        assertNull(mapTerminalKey(Key.Unknown, ctrl = false, codePoint = 0xFFFF))
+    }
+
+    @Test
+    fun `alt letter sends meta even when desktop omits the codePoint`() {
+        // Linux AWT отдаёт Alt+b с keyChar == CHAR_UNDEFINED; букву берём с физической клавиши.
+        assertEquals(listOf(0x1b, 'b'.code), codes(mapTerminalKey(Key.B, ctrl = false, alt = true, codePoint = 0xFFFF)))
+        assertEquals(listOf(0x1b, 'F'.code), codes(mapTerminalKey(Key.F, ctrl = false, alt = true, shift = true, codePoint = 0xFFFF)))
+    }
+
+    @Test
     fun `bare modifier or unknown key is ignored`() {
         assertNull(mapTerminalKey(Key.CtrlLeft, ctrl = false, codePoint = 0))
         assertNull(mapTerminalKey(Key.ShiftLeft, ctrl = false, codePoint = 0))
