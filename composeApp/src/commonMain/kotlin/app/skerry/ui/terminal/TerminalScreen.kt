@@ -44,6 +44,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -64,6 +65,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.terminal.TermCell
@@ -171,6 +173,16 @@ fun TerminalScreen(
     // Автоскролл вниз по мере нового вывода (новый снимок экрана на каждый чанк).
     LaunchedEffect(state.screen) { scroll.scrollTo(scroll.maxValue) }
 
+    // Размер вьюпорта в ячейках → PTY/эмулятор: при первом лэйауте и ресайзе окна. Без этого
+    // сетка остаётся дефолтной 80×24 и широкий вывод рвётся. state.resize гасит дубли сам.
+    // Меряем ВНЕШНИЙ Box (вьюпорт), а не прокручиваемый Text: у того размер = высота всего контента.
+    val paddingPx = with(density) { PADDING_DP.dp.toPx() }
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    LaunchedEffect(viewportSize, metrics, paddingPx) {
+        if (viewportSize.width == 0 || viewportSize.height == 0) return@LaunchedEffect
+        state.resize(gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics))
+    }
+
     val rendered = remember(state.screen, state.cursorRow, state.cursorCol, state.selection, closed) {
         renderScreen(state.screen, state.cursorRow, state.cursorCol, state.selection, showCursor = !closed)
     }
@@ -247,7 +259,7 @@ fun TerminalScreen(
         )
     }
 
-    Box(modifier) {
+    Box(modifier.onSizeChanged { viewportSize = it }) {
       Text(
         text = rendered,
         style = textStyle,

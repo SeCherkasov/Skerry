@@ -77,6 +77,36 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `resize applies the new grid to the emulator`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // Узкая сетка 5×3: автоперенос рвёт строку на ширине 5.
+        state.resize(PtySize(cols = 5, rows = 3))
+        session.emit("abcdefgh".encodeToByteArray())
+
+        assertEquals("abcde\nfgh", state.output)
+        assertEquals(3, state.screen.size) // сетка теперь ровно 3 строки
+        scope.cancel()
+    }
+
+    @Test
+    fun `repeated resize with the same size forwards once`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        state.resize(PtySize(cols = 90, rows = 25))
+        state.resize(PtySize(cols = 90, rows = 25)) // тот же размер — дубль гасим, PTY не дёргаем
+
+        assertEquals(listOf(PtySize(cols = 90, rows = 25)), session.resizes)
+        scope.cancel()
+    }
+
+    @Test
     fun `exposes session state`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

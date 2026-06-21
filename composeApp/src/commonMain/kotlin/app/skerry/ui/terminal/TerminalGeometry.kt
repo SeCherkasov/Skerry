@@ -2,6 +2,7 @@ package app.skerry.ui.terminal
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 
@@ -14,6 +15,25 @@ data class TerminalMetrics(
     val cellWidth: Float,
     val cellHeight: Float,
 )
+
+/**
+ * Сколько колонок и строк помещается во вьюпорт терминала. Из размера вьюпорта вычитаются отступы
+ * с обеих сторон ([paddingPx]), остаток делится на размер ячейки (floor — частичная ячейка не в
+ * счёт). Меньше 1×1 не отдаём: PTY без хотя бы одной ячейки бессмысленен. Пиксельные размеры в
+ * [PtySize] — это область контента (без отступов), которую сервер может использовать для графики.
+ */
+fun gridSizeFor(
+    viewportWidthPx: Float,
+    viewportHeightPx: Float,
+    paddingPx: Float,
+    metrics: TerminalMetrics,
+): PtySize {
+    val contentW = (viewportWidthPx - 2 * paddingPx).coerceAtLeast(0f)
+    val contentH = (viewportHeightPx - 2 * paddingPx).coerceAtLeast(0f)
+    val cols = (contentW / metrics.cellWidth).toInt().coerceAtLeast(1)
+    val rows = (contentH / metrics.cellHeight).toInt().coerceAtLeast(1)
+    return PtySize(cols = cols, rows = rows, widthPx = contentW.toInt(), heightPx = contentH.toInt())
+}
 
 /**
  * Перевод позиции указателя в ячейку сетки. Координаты приходят уже в системе координат контента

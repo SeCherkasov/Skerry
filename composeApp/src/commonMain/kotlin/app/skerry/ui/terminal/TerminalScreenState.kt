@@ -12,7 +12,9 @@ import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.wordSelectionAt
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -31,7 +33,10 @@ class TerminalScreenState(
     private val scope: CoroutineScope,
 ) {
     // respond: ответы терминала (DSR/DA) уходят обратно в PTY — иначе приложения, опрашивающие
-    // курсор/атрибуты, подвисают в ожидании.
+    // курсор/атрибуты, подвисают в ожидании. ВАЖНО: колбэк зовётся синхронно из emulator.feed()
+    // (внутри корутины-владельца), поэтому он обязан лишь писать в PTY (send → session.send) и НЕ
+    // должен прямо/косвенно заводить новый emulator.feed/resize — иначе ломается однопоточный
+    // контракт эмулятора. session.send в PTY-сток, обратно в commands не возвращается.
     private val emulator = TerminalEmulator(respond = { reply -> send(reply) })
 
     /** Снимок экрана (строки сверху вниз) для отрисовки. */
@@ -68,16 +73,48 @@ class TerminalScreenState(
 
     val state: StateFlow<TerminalState> get() = session.state
 
+    // Эмулятор однопоточный: feed и resize нельзя дёргать из разных корутин (гонка). Все
+    // воздействия на него проходят командной очередью, которую разбирает единственный сборщик ниже,
+    // — так вывод PTY и ресайз сериализованы относительно друг друга.
+    private val commands = Channel<TerminalCommand>(Channel.UNLIMITED)
+
+    // Последний размер, отданный в PTY: дубликаты гасим, чтобы не спамить resize при перелэйауте.
+    // @Volatile — resize() может зваться из разных корутин (LaunchedEffect/жесты), нужна видимость.
+    @Volatile
+    private var lastRequestedSize: PtySize? = null
+
     init {
+        // Единственный разрешённый сборщик вывода перекладывает чанки в командную очередь.
+        // По завершении вывода (EOF/закрытие сессии) закрываем очередь, иначе сборщик-владелец
+        // ниже навсегда повиснет в `for (cmd in commands)`.
         scope.launch {
-            session.output.collect { chunk ->
-                emulator.feed(chunk)
-                screen = emulator.lines // строки уже скопированы в неизменяемые внутри геттера
-                cursorRow = emulator.cursorRow
-                cursorCol = emulator.cursorCol
-                applicationCursorKeys = emulator.applicationCursorKeys
+            try {
+                session.output.collect { chunk -> commands.send(TerminalCommand.Feed(chunk)) }
+            } finally {
+                commands.close()
             }
         }
+        // Единственный владелец эмулятора: feed и resize выполняются строго по очереди.
+        scope.launch {
+            for (cmd in commands) {
+                when (cmd) {
+                    is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
+                    is TerminalCommand.Resize -> {
+                        emulator.resize(cmd.size.cols, cmd.size.rows)
+                        session.resize(cmd.size)
+                    }
+                }
+                publishSnapshot()
+            }
+        }
+    }
+
+    /** Опубликовать снимок эмулятора в Compose-state (после feed/resize). */
+    private fun publishSnapshot() {
+        screen = emulator.lines // строки уже скопированы в неизменяемые внутри геттера
+        cursorRow = emulator.cursorRow
+        cursorCol = emulator.cursorCol
+        applicationCursorKeys = emulator.applicationCursorKeys
     }
 
     /** Начать выделение в позиции [pos] (нажатие мыши): якорь и фокус совпадают — пока пусто. */
@@ -130,7 +167,22 @@ class TerminalScreenState(
         scope.launch { session.send(text.encodeToByteArray()) }
     }
 
+    /**
+     * Сообщить новый размер сетки. Применяется и к эмулятору, и к PTY через ту же командную очередь,
+     * что и [feed][TerminalEmulator.feed] (без гонки). Повтор того же размера игнорируется.
+     */
     fun resize(size: PtySize) {
-        scope.launch { session.resize(size) }
+        if (size.cols == lastRequestedSize?.cols && size.rows == lastRequestedSize?.rows) return
+        lastRequestedSize = size
+        commands.trySend(TerminalCommand.Resize(size))
     }
+}
+
+/** Команда единственному владельцу эмулятора — порядок feed/resize сохраняется очередью. */
+private sealed interface TerminalCommand {
+    /** Сырой чанк вывода PTY на скармливание парсеру. */
+    class Feed(val chunk: ByteArray) : TerminalCommand
+
+    /** Новый размер сетки: применяется к эмулятору и пробрасывается в PTY. */
+    class Resize(val size: PtySize) : TerminalCommand
 }
