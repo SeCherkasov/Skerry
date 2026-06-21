@@ -108,4 +108,46 @@ class TerminalGeometryTest {
             hitTestSelectionHandle(Offset(30f, 18f), sel, metrics, radiusPx = 40f),
         )
     }
+
+    @Test
+    fun `grid size divides the padded content area by the cell size`() {
+        // padding 14 с обеих сторон: контент = 10*8 по ширине, 5*18 по высоте.
+        val size = gridSizeFor(
+            viewportWidthPx = 10 * 8f + 28f,
+            viewportHeightPx = 5 * 18f + 28f,
+            paddingPx = 14f,
+            metrics = metrics,
+        )
+        assertEquals(10, size.cols)
+        assertEquals(5, size.rows)
+        // Пиксельные размеры — это размер контента (без отступов), для отчёта PTY.
+        assertEquals(80, size.widthPx)
+        assertEquals(90, size.heightPx)
+    }
+
+    @Test
+    fun `grid size floors a partial trailing cell`() {
+        // Контент 84px / 8 = 10.5 колонки → 10 (floor); 99px / 18 = 5.5 → 5.
+        val size = gridSizeFor(
+            viewportWidthPx = 84f + 28f,
+            viewportHeightPx = 99f + 28f,
+            paddingPx = 14f,
+            metrics = metrics,
+        )
+        assertEquals(10, size.cols)
+        assertEquals(5, size.rows)
+    }
+
+    @Test
+    fun `grid size never drops below one cell`() {
+        // Вьюпорт меньше отступов: контент уходит в минус → клампим к 1×1.
+        val size = gridSizeFor(
+            viewportWidthPx = 10f,
+            viewportHeightPx = 10f,
+            paddingPx = 14f,
+            metrics = metrics,
+        )
+        assertEquals(1, size.cols)
+        assertEquals(1, size.rows)
+    }
 }
