@@ -134,11 +134,48 @@ class TerminalEmulatorTest {
         assertEquals("\n\nX", emulate(chunks = arrayOf("$esc[3dX")).asText())
     }
 
+    // --- REP (повтор предыдущего символа) ----------------------------------
+
+    @Test
+    fun `rep repeats the preceding character`() {
+        // CSI Ps b — повторить последний печатный символ Ps раз (nano 9.0 так заполняет полосы).
+        assertEquals("Xaaaa", emulate(chunks = arrayOf("Xa", "$esc[3b")).asText())
+    }
+
+    @Test
+    fun `rep with no preceding print is a no-op`() {
+        assertEquals("", emulate(chunks = arrayOf("$esc[5b")).asText())
+    }
+
+    @Test
+    fun `rep carries the current style including reverse`() {
+        // nano-кейс: reverse on, печать пробела, REP — хвост полосы должен остаться инверсным.
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("$esc[7m ", "$esc[5b"))
+        assertTrue(emu.lines[0][0].style.inverse)
+        assertTrue(emu.lines[0][5].style.inverse, "повторённые пробелы тоже инверсны")
+    }
+
     // --- Стирание ----------------------------------------------------------
 
     @Test
     fun `erase to end of line clears from cursor`() {
         assertEquals("abc", emulate(chunks = arrayOf("abcdef", "$esc[3D", "$esc[0K")).asText())
+    }
+
+    @Test
+    fun `erase to end of line under reverse video fills cells with inverse`() {
+        // BCE (background-color-erase): EL/ED заливают current SGR-фоном ВКЛЮЧАЯ reverse-video.
+        // ncurses (nano) так дозаполняет reverse title-бар после ресайза — без этого хвост рисуется
+        // обычным фоном и инверсия обрывается на краю старого экрана.
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("$esc[7mX", "$esc[0K"))
+        assertTrue(emu.lines[0][0].style.inverse, "написанная ячейка под reverse")
+        assertTrue(emu.lines[0][5].style.inverse, "стёртый хвост строки тоже инверсный")
+    }
+
+    @Test
+    fun `erase to end of line carries the current background color`() {
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("$esc[41mX", "$esc[0K"))
+        assertEquals(TermColor.Red, emu.lines[0][5].style.bg)
     }
 
     @Test
