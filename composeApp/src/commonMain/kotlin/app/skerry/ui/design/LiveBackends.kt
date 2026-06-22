@@ -5,6 +5,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 
@@ -34,6 +35,13 @@ val LocalFeatures: ProvidableCompositionLocal<FeatureFlags> = staticCompositionL
  * SFTP/форвардинг следующими слайсами.
  */
 val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompositionLocalOf { null }
+
+/**
+ * Менеджер переиспользуемых identity (пароли/ключи в открытом vault). `null` — мок-путь/превью без
+ * vault: форма «New connection» не предлагает сохранённых секретов и не создаёт новые. Поставляется
+ * [DesktopDesignApp] за гейтом мастер-пароля — там же, где список перечитывается ([reload]).
+ */
+val LocalIdentities: ProvidableCompositionLocal<IdentityManagerController?> = staticCompositionLocalOf { null }
 
 /**
  * Менеджер открытых сессий (вкладки + живые соединения). `null` — мок-путь без бэкенда соединений:

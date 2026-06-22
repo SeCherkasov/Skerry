@@ -28,6 +28,9 @@ data class IdentityDraft(
         IdentityKind.PASSWORD -> IdentityAuth.Password(password)
         IdentityKind.PRIVATE_KEY -> IdentityAuth.PrivateKey(privateKeyPem, passphrase.ifBlank { null })
     }
+
+    // Секрет не должен утечь в логи/сообщения исключений (как и у [Identity]): держим только метаданные.
+    override fun toString(): String = "IdentityDraft(id=$id, label=redacted, kind=$kind, secrets=redacted)"
 }
 
 /**

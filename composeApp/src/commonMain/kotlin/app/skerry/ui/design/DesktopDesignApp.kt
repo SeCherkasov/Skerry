@@ -143,7 +143,10 @@ private fun DesktopChrome(
         }
     }
 
-    CompositionLocalProvider(LocalConnectHost provides connectHost) {
+    CompositionLocalProvider(
+        LocalConnectHost provides connectHost,
+        LocalIdentities provides identities,
+    ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             Column(Modifier.fillMaxSize()) {
                 TitleBar(state, onLock)

@@ -1,5 +1,7 @@
 package app.skerry.ui.host
 
+import app.skerry.ui.identity.IdentityDraft
+import app.skerry.ui.identity.IdentityKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -57,5 +59,69 @@ class NewConnectionFormStateTest {
         }
         assertEquals("Production", f.toDraft().group)
         assertNull(f.toDraft().id)
+    }
+
+    @Test
+    fun toDraft_carries_identity_id() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+        assertEquals("id-7", f.toDraft(identityId = "id-7").identityId)
+        assertNull(f.toDraft().identityId)
+    }
+
+    // --- Аутентификация ---
+
+    private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+
+    @Test
+    fun default_auth_is_ask_and_resolves_to_null_without_saving() {
+        val f = validBase()
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertTrue(f.canSave) // ASK не требует секрета
+        var called = false
+        val id = f.resolveIdentityId { called = true; "x" }
+        assertNull(id)
+        assertFalse(called) // identity не создаётся
+    }
+
+    @Test
+    fun existing_identity_requires_selection_and_resolves_to_its_id() {
+        val f = validBase().apply { authMode = AuthMode.EXISTING }
+        assertFalse(f.canSave) // ничего не выбрано
+        f.existingIdentityId = "saved-1"
+        assertTrue(f.canSave)
+        var called = false
+        assertEquals("saved-1", f.resolveIdentityId { called = true; "x" })
+        assertFalse(called) // существующую не пересоздаём
+    }
+
+    @Test
+    fun new_password_requires_value_and_is_saved_as_password_identity() {
+        val f = validBase().apply { authMode = AuthMode.NEW_PASSWORD; username = "root"; address = "10.0.0.1" }
+        assertFalse(f.canSave) // пароль пуст
+        f.password = "s3cr3t"
+        assertTrue(f.canSave)
+        var captured: IdentityDraft? = null
+        val id = f.resolveIdentityId { captured = it; "new-id" }
+        assertEquals("new-id", id)
+        assertEquals(IdentityKind.PASSWORD, captured?.kind)
+        assertEquals("s3cr3t", captured?.password)
+        assertEquals("root@10.0.0.1", captured?.label)
+        assertNull(captured?.id) // создаётся новая
+    }
+
+    @Test
+    fun new_key_requires_pem_and_is_saved_with_passphrase() {
+        val f = validBase().apply { authMode = AuthMode.NEW_KEY; username = "ci"; address = "build.host" }
+        assertFalse(f.canSave) // PEM пуст
+        f.privateKeyPem = "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+        f.passphrase = "pp"
+        assertTrue(f.canSave)
+        var captured: IdentityDraft? = null
+        val id = f.resolveIdentityId { captured = it; "key-id" }
+        assertEquals("key-id", id)
+        assertEquals(IdentityKind.PRIVATE_KEY, captured?.kind)
+        assertEquals(f.privateKeyPem, captured?.privateKeyPem)
+        assertEquals("pp", captured?.passphrase)
+        assertEquals("ci@build.host", captured?.label)
     }
 }

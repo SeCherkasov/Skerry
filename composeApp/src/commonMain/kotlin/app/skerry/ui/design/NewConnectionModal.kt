@@ -22,7 +22,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,8 +34,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
 /**
@@ -46,7 +52,10 @@ import app.skerry.ui.host.NewConnectionFormState
 fun NewConnectionModal(state: DesktopDesignState) {
     val noop = remember { MutableInteractionSource() }
     val hosts = LocalHosts.current
+    val identities = LocalIdentities.current
     val form = remember { NewConnectionFormState() }
+    // Гард повторного Save (Enter/двойной клик) до закрытия модалки — иначе дубль identity+host в vault.
+    var submitting by remember { mutableStateOf(false) }
     Box(
         Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = noop, indication = null, onClick = state::closeModal),
         contentAlignment = Alignment.Center,
@@ -83,10 +92,9 @@ fun NewConnectionModal(state: DesktopDesignState) {
                 Spacer14()
                 Field("Username") { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
                 Spacer14()
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field("Authentication", Modifier.weight(1f)) { ModalSelect("SSH key (Ed25519)") }
-                    Field("Group", Modifier.weight(1f)) { ModalTextField(form.group, { form.group = it }, "Production (optional)") }
-                }
+                Field("Authentication") { AuthPicker(form) }
+                Spacer14()
+                Field("Group") { ModalTextField(form.group, { form.group = it }, "Production (optional)") }
                 Spacer14()
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Field("Jump host (optional)", Modifier.weight(1f)) { ModalSelect("None — direct") }
@@ -133,10 +141,16 @@ fun NewConnectionModal(state: DesktopDesignState) {
                 PrimaryButton(
                     "Save",
                     onClick = {
-                        if (hosts == null) {
+                        if (submitting) {
+                            // повторное нажатие до закрытия — игнорируем
+                        } else if (hosts == null) {
                             state.closeModal() // мок/превью: сохранять некуда
                         } else if (form.canSave) {
-                            state.selectHost(hosts.save(form.toDraft()))
+                            // Новый секрет (пароль/ключ) сначала запечатывается в vault, его id
+                            // привязывается к хосту; ASK/мок-путь без identities → identityId = null.
+                            submitting = true
+                            val identityId = form.resolveIdentityId { draft -> identities?.save(draft) }
+                            state.selectHost(hosts.save(form.toDraft(identityId = identityId)))
                             state.closeModal()
                         }
                     },
@@ -158,7 +172,11 @@ private fun Field(label: String, modifier: Modifier = Modifier, content: @Compos
     }
 }
 
-/** Редактируемое текстовое поле формы (опц. иконка слева): стиль макета + плейсхолдер. */
+/**
+ * Редактируемое текстовое поле формы (опц. иконка слева): стиль макета + плейсхолдер.
+ * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
+ * многострочная моноширинная область для вставки приватного ключа (PEM).
+ */
 @Composable
 private fun ModalTextField(
     value: String,
@@ -166,32 +184,125 @@ private fun ModalTextField(
     placeholder: String,
     icon: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
+    masked: Boolean = false,
+    singleLine: Boolean = true,
+    mono: Boolean = false,
+    minHeightDp: Int? = null,
 ) {
-    val ui = LocalFonts.current.ui
-    val textStyle = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+    val fonts = LocalFonts.current
+    val family = if (mono) fonts.mono else fonts.ui
+    val fontSize = if (mono) 11.5.sp else 13.sp
+    val textStyle = remember(family, fontSize) {
+        TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 16.sp else 18.sp)
+    }
     // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        singleLine = true,
+        singleLine = singleLine,
         textStyle = textStyle,
         cursorBrush = SolidColor(D.cyan),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
+                    .clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    .padding(horizontal = 11.dp, vertical = 9.dp),
+                verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (icon != null) Sym(icon, size = 16.sp, color = D.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
                     inner()
                 }
             }
         },
     )
+}
+
+/**
+ * Выбор аутентификации хоста: рабочий дропдаун (Ask every time / новый пароль / новый ключ / уже
+ * сохранённые identity из vault) + инлайн-поля под новый секрет. Список сохранённых берётся из
+ * живого [LocalIdentities] (за гейтом vault); в мок-пути остаются только варианты без vault.
+ */
+@Composable
+private fun AuthPicker(form: NewConnectionFormState) {
+    val identities = LocalIdentities.current
+    val saved = identities?.identities ?: emptyList()
+    var menuOpen by remember { mutableStateOf(false) }
+    val selectedLabel = when (form.authMode) {
+        AuthMode.ASK -> "Ask every time"
+        AuthMode.NEW_PASSWORD -> "Password"
+        AuthMode.NEW_KEY -> "Private key"
+        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingIdentityId }?.let { "${it.label} (saved)" } ?: "Select identity…"
+    }
+    Column {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Txt(selectedLabel, color = D.text, size = 13.sp)
+            Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+        }
+        if (menuOpen) {
+            Column(Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(7.dp)).background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(vertical = 4.dp)) {
+                AuthOption("vpn_key_off", "Ask every time", "password requested on connect", form.authMode == AuthMode.ASK) {
+                    form.authMode = AuthMode.ASK; menuOpen = false
+                }
+                AuthOption("password", "Password…", "store a password in your vault", form.authMode == AuthMode.NEW_PASSWORD) {
+                    form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
+                }
+                AuthOption("key", "Paste private key…", "store an SSH key in your vault", form.authMode == AuthMode.NEW_KEY) {
+                    form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                }
+                if (saved.isNotEmpty()) {
+                    HLine(modifier = Modifier.padding(vertical = 4.dp))
+                    saved.forEach { identity ->
+                        AuthOption("badge", identity.label, "saved identity", form.authMode == AuthMode.EXISTING && form.existingIdentityId == identity.id) {
+                            form.authMode = AuthMode.EXISTING; form.existingIdentityId = identity.id; menuOpen = false
+                        }
+                    }
+                }
+            }
+        }
+        when (form.authMode) {
+            AuthMode.NEW_PASSWORD -> {
+                Spacer14()
+                ModalTextField(form.password, { form.password = it }, "password to store", icon = "key", masked = true)
+            }
+            AuthMode.NEW_KEY -> {
+                Spacer14()
+                // keyboardType=Password гасит автокоррект/подсказки IME (Android), чтобы ключ не оседал в словаре.
+                ModalTextField(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 96)
+                Spacer14()
+                ModalTextField(form.passphrase, { form.passphrase = it }, "key passphrase (optional)", icon = "lock", masked = true)
+            }
+            else -> {}
+        }
+    }
+}
+
+/** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */
+@Composable
+private fun AuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Sym(icon, size = 16.sp, color = if (selected) D.cyanBright else D.dim)
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = if (selected) D.cyanBright else D.text, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = D.faint, size = 10.5.sp)
+        }
+        if (selected) Sym("check", size = 15.sp, color = D.cyanBright)
+    }
 }
 
 @Composable
