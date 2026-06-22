@@ -89,6 +89,18 @@ data class TermCell(
     constructor(char: Char, style: TermStyle = TermStyle()) : this(char.toString(), style, CellWidth.Single)
 }
 
+/**
+ * Одна строка сетки: ячейки + флаг [wrapped]. `wrapped == true` означает «мягкий перенос» — строку
+ * оборвал автоперенос (DECAWM) и она логически продолжается на следующей; honest `\n` оставляет
+ * `false`. Reflow при ресайзе склеивает соседние wrapped-строки в логическую и переразбивает её по
+ * новой ширине. Делегирует [MutableList], поэтому весь код сетки работает со строкой как со списком
+ * ячеек, не зная про флаг.
+ */
+class TermRow(
+    private val cells: MutableList<TermCell>,
+    var wrapped: Boolean = false,
+) : MutableList<TermCell> by cells
+
 /** Режим репортинга мыши в приложение (DEC private modes). Кодировку выбирает [TerminalEmulator.mouseSgr]. */
 enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
 
@@ -133,10 +145,10 @@ class TerminalEmulator(
     var rows: Int = rows.coerceAtLeast(1)
         private set
 
-    private var primaryGrid: MutableList<MutableList<TermCell>> = freshScreen()
-    private var altGrid: MutableList<MutableList<TermCell>>? = null
-    private var grid: MutableList<MutableList<TermCell>> = primaryGrid
-    private val scrollback = ArrayDeque<List<TermCell>>()
+    private var primaryGrid: MutableList<TermRow> = freshScreen()
+    private var altGrid: MutableList<TermRow>? = null
+    private var grid: MutableList<TermRow> = primaryGrid
+    private val scrollback = ArrayDeque<TermRow>()
 
     /** true, когда активен альтернативный буфер (полноэкранные TUI). У него нет scrollback. */
     var altScreen: Boolean = false
@@ -658,13 +670,16 @@ class TerminalEmulator(
     private fun putCodePoint(cp: Int) {
         val w = charWidth(cp)
         if (pendingWrap) {
+            // Мягкий перенос: покидаемая строка логически продолжается на следующей — помечаем её
+            // wrapped (для reflow) ДО lineFeed, пока cy ещё указывает на неё.
+            grid[cy].wrapped = true
             cx = 0
             lineFeed()
             pendingWrap = false
         }
         // Широкий символ не помещается в последнюю колонку: при автопереносе уходим на новую строку,
         // иначе размещаем его как одиночный в последней клетке (нет места под continuation).
-        if (w == 2 && cx >= cols - 1 && autoWrap) { cx = 0; lineFeed() }
+        if (w == 2 && cx >= cols - 1 && autoWrap) { grid[cy].wrapped = true; cx = 0; lineFeed() }
 
         val text = codePointToString(cp)
         val row = grid[cy]
@@ -757,7 +772,7 @@ class TerminalEmulator(
         grid.add(scrollTop, blankRow())
     }
 
-    private fun pushScrollback(row: List<TermCell>) {
+    private fun pushScrollback(row: TermRow) {
         scrollback.addLast(row)
         while (scrollback.size > maxScrollback) scrollback.removeFirst()
     }
@@ -767,9 +782,11 @@ class TerminalEmulator(
     private fun eraseLine(mode: Int) {
         val row = grid[cy]
         when (mode) {
-            0 -> for (c in cx until cols) row[c] = blankCell()
+            // Стирание хвоста (0) или всей строки (2) убирает её продолжение — снимаем wrapped,
+            // чтобы reflow не приклеил к ней следующую. Стирание головы (1) хвост не трогает.
+            0 -> { for (c in cx until cols) row[c] = blankCell(); row.wrapped = false }
             1 -> for (c in 0..cx.coerceAtMost(cols - 1)) row[c] = blankCell()
-            2 -> for (c in 0 until cols) row[c] = blankCell()
+            2 -> { for (c in 0 until cols) row[c] = blankCell(); row.wrapped = false }
         }
     }
 
@@ -944,23 +961,167 @@ class TerminalEmulator(
 
     // --- Resize ------------------------------------------------------------
 
-    /** Изменить размер сетки. Сбрасывает регион прокрутки и табстопы, клампит курсор. */
+    /**
+     * Изменить размер сетки. Основной буфер переукладывается (reflow): мягко-перенесённые строки
+     * склеиваются в логические и переразбиваются по новой ширине, scrollback участвует, курсор едет
+     * со своим текстом. Alt-буфер НЕ reflow'ится (приложение перерисует) — обрезка/дополнение.
+     * Сбрасывает регион прокрутки и табстопы.
+     */
     fun resize(newCols: Int, newRows: Int) {
         val nc = newCols.coerceAtLeast(1)
         val nr = newRows.coerceAtLeast(1)
         if (nc == cols && nr == rows) return
-        resizeGrid(primaryGrid, nc, nr, activePrimary = !altScreen)
+        val wasPendingWrap = pendingWrap
+        val (newCy, newCx) = reflowPrimary(nc, nr, trackCursor = !altScreen)
+        if (!altScreen) grid = primaryGrid
         altGrid?.let { resizeGrid(it, nc, nr, activePrimary = false) }
         cols = nc
         rows = nr
         tabStops = defaultTabStops(nc)
         resetRegion()
-        cx = cx.coerceIn(0, nc - 1)
-        cy = cy.coerceIn(0, nr - 1)
-        pendingWrap = false
+        if (altScreen) {
+            cx = cx.coerceIn(0, nc - 1)
+            cy = cy.coerceIn(0, nr - 1)
+            pendingWrap = false
+        } else {
+            cx = newCx.coerceIn(0, nc - 1)
+            cy = newCy.coerceIn(0, nr - 1)
+            // Если курсор был в pending-wrap и после reflow снова сел на последнюю колонку — сохраняем
+            // режим (следующий символ перенесётся, а не перезапишет). Иначе сбрасываем.
+            pendingWrap = wasPendingWrap && cx == nc - 1
+        }
     }
 
-    private fun resizeGrid(g: MutableList<MutableList<TermCell>>, nc: Int, nr: Int, activePrimary: Boolean) {
+    /**
+     * Переукладка основного буфера (scrollback + [primaryGrid]) под ширину [nc]/высоту [nr]. Логические
+     * строки (цепочки мягко-перенесённых физических) переразбиваются по [nc]; нижние [nr] строк идут в
+     * новый [primaryGrid], остальные — в scrollback (с обрезкой по maxScrollback). Возвращает новую
+     * позицию курсора `(cy, cx)` в координатах нового grid (имеет смысл лишь при [trackCursor]).
+     */
+    private fun reflowPrimary(nc: Int, nr: Int, trackCursor: Boolean): Pair<Int, Int> {
+        val blank = TermCell(" ")
+        val cursorAbs = scrollback.size + cy
+
+        // 1. Поток всех физических строк основного буфера.
+        val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
+            addAll(scrollback); addAll(primaryGrid)
+        }
+
+        // 2. Группируем в логические строки (цепочки по wrapped) и находим логический индекс/колонку курсора.
+        val logicals = ArrayList<MutableList<TermCell>>()
+        var curLogIndex = 0
+        var curLogCol = cx
+        run {
+            var i = 0
+            var abs = 0
+            while (i < src.size) {
+                val cells = ArrayList<TermCell>()
+                while (true) {
+                    val row = src[i]
+                    if (trackCursor && abs == cursorAbs) {
+                        curLogIndex = logicals.size
+                        curLogCol = cells.size + cx
+                    }
+                    cells.addAll(row)
+                    val wrapped = row.wrapped
+                    i++; abs++
+                    if (!wrapped || i >= src.size) break
+                }
+                logicals.add(cells)
+            }
+        }
+
+        // 3. Каждую логическую тримим по хвостовым дефолтным пробелам и переразбиваем по nc.
+        val out = ArrayList<TermRow>(logicals.size)
+        var cursorAbsNew = 0
+        var cursorColNew = 0
+        logicals.forEachIndexed { idx, cells ->
+            var len = cells.size
+            while (len > 0 && cells[len - 1] == blank) len--
+            val isCursorLine = trackCursor && idx == curLogIndex
+            // Гарантируем, что колонка курсора достижима после трима (курсор может стоять за текстом).
+            if (isCursorLine) len = maxOf(len, curLogCol + 1)
+            val logical = if (len == cells.size) cells else cells.subList(0, len.coerceAtMost(cells.size))
+            val base = out.size
+            // Позицию курсора берём из реального прохода разбиения (а не из curLogCol/nc): wide-символы
+            // могут давать строки с nc-1 видимыми ячейками, и арифметика бы съезжала.
+            val cursorOut = IntArray(2) { -1 }
+            out.addAll(splitLogical(logical, nc, blank, if (isCursorLine) curLogCol else -1, cursorOut))
+            if (isCursorLine && cursorOut[0] >= 0) {
+                cursorAbsNew = base + cursorOut[0]
+                cursorColNew = cursorOut[1]
+            }
+        }
+
+        // 4. Отбрасываем незначимый пустой хвост (неиспользованное место внизу экрана не должно уходить
+        //    в scrollback): держим строки до последней непустой и до строки курсора включительно.
+        var significant = out.size
+        while (significant > 0 && out[significant - 1].all { it == blank }) significant--
+        if (trackCursor) significant = maxOf(significant, cursorAbsNew + 1)
+        significant = significant.coerceAtLeast(1).coerceAtMost(out.size)
+        val kept = out.subList(0, significant)
+
+        // 5. Делим на grid (нижние nr) и scrollback (верх), дополняя пустыми при нехватке.
+        val gridStart: Int
+        val newGrid: MutableList<TermRow>
+        if (kept.size >= nr) {
+            gridStart = kept.size - nr
+            newGrid = ArrayList(kept.subList(gridStart, kept.size))
+        } else {
+            gridStart = 0
+            newGrid = ArrayList(kept)
+            repeat(nr - kept.size) { newGrid.add(TermRow(MutableList(nc) { blank })) }
+        }
+        val newScroll = if (gridStart > 0) kept.subList(0, gridStart) else emptyList()
+
+        scrollback.clear()
+        val drop = (newScroll.size - maxScrollback).coerceAtLeast(0)
+        for (r in drop until newScroll.size) scrollback.addLast(newScroll[r])
+        primaryGrid = newGrid
+
+        val newCy = cursorAbsNew - gridStart
+        return Pair(newCy, cursorColNew)
+    }
+
+    /**
+     * Разбивает логическую строку [cells] на физические шириной [nc], не разрывая широкие символы
+     * (Wide+Continuation не должны попадать в разные строки). Все, кроме последней, помечаются
+     * `wrapped = true`; каждая дополняется до [nc] нейтральным [pad]. Пустая логическая → одна пустая строка.
+     *
+     * Если [cursorCol] >= 0, в [cursorOut] кладётся позиция курсора в результате: `[0]` — индекс строки
+     * (внутри возвращённого списка), `[1]` — колонка в ней. Позиция берётся прямым проходом, поэтому
+     * корректна и при early-break на широком символе (когда строка несёт nc-1 видимых ячеек).
+     */
+    private fun splitLogical(
+        cells: List<TermCell>,
+        nc: Int,
+        pad: TermCell,
+        cursorCol: Int = -1,
+        cursorOut: IntArray? = null,
+    ): List<TermRow> {
+        if (cells.isEmpty()) {
+            if (cursorCol >= 0 && cursorOut != null) { cursorOut[0] = 0; cursorOut[1] = cursorCol.coerceIn(0, nc - 1) }
+            return listOf(TermRow(MutableList(nc) { pad }))
+        }
+        val out = ArrayList<TermRow>()
+        var idx = 0
+        while (idx < cells.size) {
+            val chunk = ArrayList<TermCell>(nc)
+            while (idx < cells.size && chunk.size < nc) {
+                val cell = cells[idx]
+                // Широкий символ не делим: если пара не влезает в остаток непустого chunk — оборвать раньше.
+                if (cell.width == CellWidth.Wide && chunk.isNotEmpty() && chunk.size + 2 > nc) break
+                if (idx == cursorCol && cursorOut != null) { cursorOut[0] = out.size; cursorOut[1] = chunk.size }
+                chunk.add(cell); idx++
+            }
+            while (chunk.size < nc) chunk.add(pad)
+            out.add(TermRow(chunk, wrapped = idx < cells.size))
+        }
+        return out
+    }
+
+    /** Ресайз сетки БЕЗ reflow (alt-screen): обрезка/дополнение строк и рядов. */
+    private fun resizeGrid(g: MutableList<TermRow>, nc: Int, nr: Int, activePrimary: Boolean) {
         for (row in g) {
             while (row.size > nc) row.removeAt(row.size - 1)
             while (row.size < nc) row.add(TermCell(' '))
@@ -973,14 +1134,14 @@ class TerminalEmulator(
             }
             while (g.size > nr) g.removeAt(g.size - 1)
         } else {
-            while (g.size < nr) g.add(MutableList(nc) { TermCell(' ') })
+            while (g.size < nr) g.add(TermRow(MutableList(nc) { TermCell(' ') }))
         }
     }
 
     // --- Фабрики ячеек -----------------------------------------------------
 
-    private fun freshScreen(): MutableList<MutableList<TermCell>> =
-        MutableList(rows) { MutableList(cols) { TermCell(' ') } }
+    private fun freshScreen(): MutableList<TermRow> =
+        MutableList(rows) { TermRow(MutableList(cols) { TermCell(' ') }) }
 
     /**
      * Пустая ячейка с текущим фоном — background-color-erase (BCE): стирание и прокрутка красят
@@ -991,11 +1152,12 @@ class TerminalEmulator(
      */
     private fun blankCell() = TermCell(' ', TermStyle(fg = style.fg, bg = style.bg, inverse = style.inverse))
 
-    private fun blankRow() = MutableList(cols) { blankCell() }
+    private fun blankRow() = TermRow(MutableList(cols) { blankCell() })
 
     private fun blankLine(r: Int) {
         val row = grid[r]
         for (c in 0 until cols) row[c] = blankCell()
+        row.wrapped = false
     }
 
     private fun parseArgs(raw: String): List<Int> {

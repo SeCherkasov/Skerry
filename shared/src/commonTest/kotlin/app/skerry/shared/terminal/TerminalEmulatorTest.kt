@@ -657,6 +657,68 @@ class TerminalEmulatorTest {
         assertEquals("hello", emu.asText())
     }
 
+    @Test
+    fun `widening rejoins a soft-wrapped line`() {
+        // cols=4: "ABCDEF" автопереносится на "ABCD"+"EF" (мягкий перенос).
+        val emu = emulate(cols = 4, rows = 6, chunks = arrayOf("ABCDEF"))
+        assertEquals("ABCD\nEF", emu.asText())
+        emu.resize(10, 6)
+        // На ширине 10 обе части склеиваются обратно в одну логическую строку.
+        assertEquals("ABCDEF", emu.asText())
+        assertTrue(emu.lines.all { it.size == 10 })
+    }
+
+    @Test
+    fun `widening does not merge across a hard newline`() {
+        val emu = emulate(cols = 10, rows = 6, chunks = arrayOf("AB\r\nCD"))
+        emu.resize(40, 6)
+        // Явный перевод строки — граница логических строк, склейки нет.
+        assertEquals("AB\nCD", emu.asText())
+    }
+
+    @Test
+    fun `narrowing reflows a long line onto the new width`() {
+        // Honest-строка длиной 8 без переноса (cols=10) при сужении до 4 переразбивается.
+        val emu = emulate(cols = 10, rows = 6, chunks = arrayOf("ABCDEFGH"))
+        emu.resize(4, 6)
+        assertEquals("ABCD\nEFGH", emu.asText())
+        assertTrue(emu.lines.all { it.size == 4 })
+    }
+
+    @Test
+    fun `reflow round-trips a soft-wrapped line through narrow and back`() {
+        val emu = emulate(cols = 10, rows = 6, chunks = arrayOf("ABCDEFGHIJKLM"))
+        emu.resize(4, 6)
+        assertEquals("ABCD\nEFGH\nIJKL\nM", emu.asText())
+        emu.resize(20, 6)
+        assertEquals("ABCDEFGHIJKLM", emu.asText())
+    }
+
+    @Test
+    fun `narrowing reflows wide chars and tracks the cursor correctly`() {
+        // "AB中C" на ширине 6: A B 中(wide,2кл) C, курсор за C (колонка 5).
+        val emu = emulate(cols = 6, rows = 6, chunks = arrayOf("AB中C"))
+        assertEquals(0, emu.cursorRow)
+        assertEquals(5, emu.cursorCol)
+        emu.resize(3, 6)
+        // На ширине 3 широкий 中 не влезает после "AB" → переносится; курсор едет на строку за "中C".
+        assertEquals("AB\n中C", emu.asText())
+        assertEquals(2, emu.cursorRow)
+        assertEquals(0, emu.cursorCol)
+    }
+
+    @Test
+    fun `widening keeps the cursor with its text`() {
+        // cols=4 "ABCDEF": курсор после F — абсолютно строка 1, колонка 2.
+        val emu = emulate(cols = 4, rows = 6, chunks = arrayOf("ABCDEF"))
+        assertEquals(1, emu.cursorRow)
+        assertEquals(2, emu.cursorCol)
+        emu.resize(10, 6)
+        // После склейки курсор переезжает на одну строку, колонка 6 (после "ABCDEF").
+        assertEquals(0, emu.cursorRow)
+        assertEquals(6, emu.cursorCol)
+    }
+
     // --- Курсор: абсолютные индексы ----------------------------------------
 
     @Test
