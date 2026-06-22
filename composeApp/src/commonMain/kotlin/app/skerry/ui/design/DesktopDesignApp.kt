@@ -345,6 +345,11 @@ private fun StatusBar() {
     }
     val upRate = throughput?.upRate
     val downRate = throughput?.downRate
+    // RTT-пинг активной сессии (тот же приём, что throughput); до первого замера/при сбое — null.
+    val ping = remember(active, connected) {
+        if (connected && active != null) active.controller.openPing() else null
+    }
+    val rttMs = ping?.rttMs
     // Размер сетки — живой cols×rows активного терминала; вне коннекта остаётся мок-метка макета.
     val gridLabel = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)
         ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
@@ -359,8 +364,8 @@ private fun StatusBar() {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
-            // RTT-пинг — живой источник в отдельном слайсе; пока «—» в живом режиме.
-            StatusItem("network_ping", if (live) "—" else "42 ms", mono = mono)
+            // RTT-пинг активной сессии live (до первого замера — «—»); в мок-режиме — метка шаблона.
+            StatusItem("network_ping", if (live) (rttMs?.let { "$it ms" } ?: "—") else "42 ms", mono = mono)
             // Throughput канала live (до коннекта — «—»); в мок-режиме (офскрин) — метки шаблона.
             StatusItem("arrow_upward", if (live) (upRate?.let { humanRate(it) } ?: "—") else "1.2 KB/s", mono = mono)
             StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
