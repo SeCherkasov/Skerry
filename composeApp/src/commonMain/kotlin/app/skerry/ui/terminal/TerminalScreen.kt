@@ -316,23 +316,44 @@ fun TerminalScreen(
       // (шапка nano/htop) обрывались на последнем непробельном символе. Канвас заливает фон по
       // моноширинной сетке на всю ширину строки, включая хвостовые ячейки. Геометрия — как у курсора
       // (тот же padding и сдвиг на прокрутку), глифы рисует Text поверх.
-      if (state.screen.isNotEmpty()) {
+      val bgLayout = layout
+      if (state.screen.isNotEmpty() && bgLayout != null) {
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
               val scrollPx = scroll.value.toFloat()
-              val first = (scrollPx / metrics.cellHeight).toInt().coerceAtLeast(0)
-              val last = ((scrollPx + size.height) / metrics.cellHeight).toInt().coerceAtMost(state.screen.lastIndex)
-              for (r in first..last) {
-                  val row = state.screen[r]
-                  val y = r * metrics.cellHeight - scrollPx
-                  var c = 0
-                  while (c < row.size) {
-                      val color = cellBgColor(row[c].style)
-                      if (color == null) { c++; continue }
-                      val s = c
-                      c++
-                      while (c < row.size && cellBgColor(row[c].style) == color) c++
-                      drawRect(color, topLeft = Offset(s * metrics.cellWidth, y), size = Size((c - s) * metrics.cellWidth, metrics.cellHeight))
+              val screen = state.screen
+              // Позиции берём ИЗ фактической раскладки текста (а не из приблизительной метрики ячейки):
+              // иначе фон уезжает от глифов на больших колонках (раскиданные reverse-боксы нижнего бара
+              // nano). rowStart — смещение первого символа строки в [rendered] (+1 на '\n' между строками).
+              // ВАЖНО: [bgLayout] — снимок [rendered] и при активном выводе может на кадр ОТСТАВАТЬ от
+              // более свежего [screen]. Все смещения держим в пределах длины текста раскладки и
+              // обрываем обход, когда строка уже за её концом, — иначе getHorizontalPosition бросает
+              // IndexOutOfBounds в фазе отрисовки (краш на каждый кадр). Один кадр может быть слегка
+              // неточным; рекомпозиция со свежим layout его выправляет.
+              val textLen = bgLayout.layoutInput.text.length
+              var rowStart = 0
+              for (r in screen.indices) {
+                  val row = screen[r]
+                  if (rowStart > textLen) break
+                  val line = bgLayout.getLineForOffset(rowStart)
+                  val top = bgLayout.getLineTop(line) - scrollPx
+                  val bottom = bgLayout.getLineBottom(line) - scrollPx
+                  if (bottom >= 0f && top <= size.height) {
+                      var c = 0
+                      while (c < row.size) {
+                          val color = cellBgColor(row[c].style)
+                          if (color == null) { c++; continue }
+                          val s = c
+                          c++
+                          while (c < row.size && cellBgColor(row[c].style) == color) c++
+                          val left = bgLayout.getHorizontalPosition((rowStart + s).coerceAtMost(textLen), usePrimaryDirection = true)
+                          // Хвостовой ран (до конца строки) тянем до полной ширины: Text исключает
+                          // висячие пробелы, и их правый край по layout был бы коротким (исходный баг).
+                          val right = if (c >= row.size) size.width
+                              else bgLayout.getHorizontalPosition((rowStart + c).coerceAtMost(textLen), usePrimaryDirection = true)
+                          if (right > left) drawRect(color, topLeft = Offset(left, top), size = Size(right - left, bottom - top))
+                      }
                   }
+                  rowStart += row.size + 1
               }
           }
       }
