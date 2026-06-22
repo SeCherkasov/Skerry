@@ -28,12 +28,15 @@ import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
+import kotlinx.coroutines.withTimeoutOrNull
+import net.schmizz.sshj.connection.ConnectionException
 import net.schmizz.sshj.connection.channel.Channel
 import net.schmizz.sshj.connection.channel.OpenFailException
 import net.schmizz.sshj.connection.channel.direct.DirectConnection
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.connection.channel.forwarded.ConnectListener
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
+import net.schmizz.sshj.transport.TransportException
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
 
@@ -163,6 +166,31 @@ private class SshjConnection(
         }
     }
 
+    override suspend fun measureRoundTrip(): Long? = withContext(Dispatchers.IO) {
+        if (!client.isConnected) return@withContext null
+        val startNanos = System.nanoTime()
+        // Таймаут держим снаружи через withTimeoutOrNull: при просрочке корутина отменяется (и через
+        // runInterruptible прерывает блокирующий retrieve), а наружу выходит чистый null — без
+        // угадывания «ответ или таймаут» по времени. Отмену извне withTimeoutOrNull не глотает.
+        withTimeoutOrNull(PING_TIMEOUT_MILLIS) {
+            // sendGlobalRequest ВНЕ runInterruptible: Promise регистрируется в стейте sshj до того,
+            // как мы уходим в прерываемое ожидание ответа, — прерывание не оставит «висячий» Promise
+            // (на крайний случай его подберёт teardown соединения при disconnect).
+            val replied = try {
+                val promise = client.connection.sendGlobalRequest(KEEPALIVE_REQUEST, true, ByteArray(0))
+                // keepalive@openssh.com, wantReply=true: OpenSSH отвечает SUCCESS (retrieve вернётся),
+                // прочие серверы — REQUEST_FAILURE (retrieve бросит ConnectionException). Оба = round-trip.
+                runInterruptible { promise.retrieve() }
+                true
+            } catch (e: ConnectionException) {
+                true // REQUEST_FAILURE — это ОТВЕТ сервера, round-trip состоялся
+            } catch (e: TransportException) {
+                false // обрыв транспорта — round-trip не состоялся
+            }
+            if (replied) (System.nanoTime() - startNanos) / 1_000_000 else null
+        }
+    }
+
     override suspend fun openShell(size: PtySize, term: String): ShellChannel =
         withContext(Dispatchers.IO) {
             try {
@@ -240,6 +268,8 @@ private class SshjConnection(
 
     private companion object {
         const val EXEC_TIMEOUT_SECONDS = 30L
+        const val KEEPALIVE_REQUEST = "keepalive@openssh.com"
+        const val PING_TIMEOUT_MILLIS = 5_000L
     }
 }
 

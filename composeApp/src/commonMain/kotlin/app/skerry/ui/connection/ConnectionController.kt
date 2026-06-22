@@ -97,6 +97,7 @@ class ConnectionController(
     private val sftpMutex = Mutex()
     private var metrics: HostMetricsController? = null
     private var throughput: ThroughputController? = null
+    private var ping: PingController? = null
 
     fun connect(target: SshTarget, auth: SshAuth) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
@@ -216,6 +217,19 @@ class ConnectionController(
         ).also { it.start(); throughput = it }
     }
 
+    /**
+     * Контроллер RTT-пинга этой сессии — один на соединение, лениво/кэш (как [openThroughput]),
+     * замер гоняется на [scope] сессии. Останавливается в [disconnect].
+     * @throws IllegalStateException сессия не подключена (нет живого соединения)
+     */
+    fun openPing(): PingController {
+        val conn = connection ?: error("Нет активного соединения для пинга")
+        return ping ?: PingController(
+            measure = { conn.measureRoundTrip() },
+            scope = scope,
+        ).also { it.start(); ping = it }
+    }
+
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {
         connectJob?.cancel()
@@ -230,6 +244,8 @@ class ConnectionController(
         metrics = null
         throughput?.stop()
         throughput = null
+        ping?.stop()
+        ping = null
         sessionScope?.cancel()
         sessionScope = null
         connection = null

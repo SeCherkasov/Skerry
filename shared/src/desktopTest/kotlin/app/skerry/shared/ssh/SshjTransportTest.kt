@@ -91,6 +91,22 @@ class SshjTransportTest {
     }
 
     @Test
+    fun `measures round-trip after connect`() = runTest {
+        val connection = connect()
+        try {
+            // MINA SSHD не знает keepalive@openssh.com и отвечает REQUEST_FAILURE — это всё равно
+            // состоявшийся round-trip, замер должен вернуть неотрицательное время (< таймаута).
+            val rtt = connection.measureRoundTrip()
+            assertTrue(
+                rtt != null && rtt >= 0 && rtt < 5_000,
+                "round-trip должен дать неотрицательное время меньше таймаута, получено: $rtt",
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Test
     fun `rejects invalid password`() = runTest {
         assertFailsWith<SshAuthenticationException> {
             SshjTransport(acceptAllKeys).connect(target(), SshAuth.Password("wrong"))
