@@ -103,6 +103,10 @@ class TerminalEmulator(
     private var cy = 0
     private var pendingWrap = false
 
+    // Последний напечатанный графический символ — для REP (CSI Ps b): nano 9.0/ncurses заполняют
+    // им полосы (reverse title-бар), вместо литеральных пробелов. null до первой печати.
+    private var lastPrintedChar: Char? = null
+
     /** Абсолютный индекс строки курсора в [lines] (с учётом scrollback в основном буфере). */
     val cursorRow: Int get() = (if (altScreen) 0 else scrollback.size) + cy
 
@@ -322,6 +326,7 @@ class TerminalEmulator(
             'S' -> scrollUp(arg(0, 1))
             'T' -> scrollDown(arg(0, 1))
             'X' -> eraseChars(arg(0, 1))
+            'b' -> repeatLastChar(arg(0, 1))
             'g' -> clearTabStop(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
             'h' -> if (args.contains(4)) insertMode = true
             'l' -> if (args.contains(4)) insertMode = false
@@ -425,7 +430,14 @@ class TerminalEmulator(
         } else {
             row[cx] = TermCell(ch, style)
         }
+        lastPrintedChar = ch
         if (cx >= cols - 1) { if (autoWrap) pendingWrap = true } else cx++
+    }
+
+    /** REP (CSI Ps b): повторить последний печатный символ Ps раз. Кламп — не больше площади экрана. */
+    private fun repeatLastChar(n: Int) {
+        val ch = lastPrintedChar ?: return
+        repeat(n.coerceIn(1, cols * rows)) { putChar(ch) }
     }
 
     private fun lineFeed() {
@@ -608,6 +620,7 @@ class TerminalEmulator(
         scrollback.clear()
         cx = 0; cy = 0
         pendingWrap = false
+        lastPrintedChar = null
         style = TermStyle()
         resetRegion()
         tabStops = defaultTabStops(cols)
@@ -679,8 +692,14 @@ class TerminalEmulator(
     private fun freshScreen(): MutableList<MutableList<TermCell>> =
         MutableList(rows) { MutableList(cols) { TermCell(' ') } }
 
-    /** Пустая ячейка с текущим фоном (стирание/прокрутка красят фоном current-bg). */
-    private fun blankCell() = TermCell(' ', TermStyle(bg = style.bg))
+    /**
+     * Пустая ячейка с текущим фоном — background-color-erase (BCE): стирание и прокрутка красят
+     * ячейки ТЕКУЩИМ SGR-фоном, включая reverse-video (тогда «фоном» становится цвет текста).
+     * Несём fg/bg/inverse: ncurses (nano/htop) дозаполняет reverse-полосы через `ESC[K`, полагаясь
+     * на BCE — без флага inverse хвост строки рисовался бы обычным фоном. Глифовые атрибуты
+     * (bold/underline/strike) у пустой ячейки не несём: xterm их при стирании не применяет.
+     */
+    private fun blankCell() = TermCell(' ', TermStyle(fg = style.fg, bg = style.bg, inverse = style.inverse))
 
     private fun blankRow() = MutableList(cols) { blankCell() }
 
