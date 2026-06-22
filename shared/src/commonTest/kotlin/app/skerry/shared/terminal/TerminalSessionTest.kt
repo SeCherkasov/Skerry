@@ -61,6 +61,23 @@ class TerminalSessionTest {
     }
 
     @Test
+    fun `does not drop output emitted before the subscriber attaches`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val channel = FakeShellChannel()
+        val session = ShellTerminalSession(channel, scope)
+
+        // Баннер шелла приходит ДО того, как UI успел подписаться (реальный first-connect).
+        channel.emit("banner\r\n".encodeToByteArray())
+
+        val received = mutableListOf<ByteArray>()
+        scope.launch { session.output.collect { received += it } }
+
+        assertContentEquals("banner\r\n".encodeToByteArray(), received.single())
+        scope.cancel()
+    }
+
+    @Test
     fun `send writes to the channel`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
@@ -103,6 +120,7 @@ class TerminalSessionTest {
         val scope = CoroutineScope(dispatcher)
         val channel = FakeShellChannel()
         val session = ShellTerminalSession(channel, scope)
+        scope.launch { session.output.collect {} } // сбор канала стартует по подписке
 
         channel.eof()
 
@@ -130,8 +148,9 @@ class TerminalSessionTest {
         val scope = CoroutineScope(dispatcher)
         val channel = ThrowingShellChannel()
         val session = ShellTerminalSession(channel, scope)
+        scope.launch { session.output.collect {} } // сбор канала стартует по подписке
 
-        // Сбор вывода стартует в init; обрыв транспорта (не отмена) должен перевести
+        // Сбор вывода стартует с подпиской; обрыв транспорта (не отмена) должен перевести
         // сессию в Closed, но не уронить scope, в котором живёт сбор.
         assertEquals(TerminalState.Closed, session.state.value)
         assertTrue(scope.isActive, "обрыв транспорта не должен отменять scope")

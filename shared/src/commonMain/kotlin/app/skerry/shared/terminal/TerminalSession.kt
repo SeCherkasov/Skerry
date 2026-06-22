@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -58,6 +59,13 @@ class ShellTerminalSession(
 
     init {
         scope.launch {
+            // КРИТИЧНО: сбор канала стартуем ТОЛЬКО после появления первого подписчика. Иначе
+            // `init` начинает читать канал сразу при создании сессии и эмитит стартовый вывод
+            // (баннер шелла/первый prompt) в [_output] — а у него replay=0, и без подписчиков
+            // эмит ОТБРАСЫВАЕТСЯ. UI-коллектор подписывается на миллисекунды позже (channel.read
+            // успевает вернуть баннер раньше), и первый экран остаётся пустым. Дождавшись
+            // подписчика, читаем канал без потерь — ни один байт не проходит мимо.
+            _output.subscriptionCount.first { it > 0 }
             try {
                 channel.output.collect { _output.emit(it) }
             } catch (e: CancellationException) {
@@ -76,5 +84,10 @@ class ShellTerminalSession(
 
     override suspend fun resize(size: PtySize) = channel.resize(size)
 
-    override suspend fun close() = channel.close()
+    override suspend fun close() {
+        // Состояние закрываем явно: сбор канала мог ещё не стартовать (нет подписчика),
+        // и тогда [finally] сборщика не отработал бы, а сессия уже закрыта.
+        channel.close()
+        _state.value = TerminalState.Closed
+    }
 }
