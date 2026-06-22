@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
+import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
@@ -42,6 +43,13 @@ val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompo
  * [DesktopDesignApp] за гейтом мастер-пароля — там же, где список перечитывается ([reload]).
  */
 val LocalIdentities: ProvidableCompositionLocal<IdentityManagerController?> = staticCompositionLocalOf { null }
+
+/**
+ * Генератор/инспектор SSH-ключей (создание пары в разделе Vault, вычисление отпечатка/типа уже
+ * сохранённых ключей). `null` — мок-путь/превью без платформенной крипты: [app.skerry.ui.design.VaultView]
+ * рисует статичный макет, кнопка генерации недоступна. Поставляется [DesktopDesignApp] за гейтом vault.
+ */
+val LocalSshKeyGenerator: ProvidableCompositionLocal<SshKeyGenerator?> = staticCompositionLocalOf { null }
 
 /**
  * Менеджер открытых сессий (вкладки + живые соединения). `null` — мок-путь без бэкенда соединений:

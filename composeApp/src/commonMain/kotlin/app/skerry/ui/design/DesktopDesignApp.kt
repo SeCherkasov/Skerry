@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.connection.ConnectionController
@@ -73,6 +74,7 @@ fun DesktopDesignApp(
     identities: IdentityManagerController? = null,
     sessions: SessionsController? = null,
     knownHosts: KnownHostsController? = null,
+    keyGenerator: SshKeyGenerator? = null,
     features: FeatureFlags = FeatureFlags(),
 ) {
     val fonts = DesignFonts(
@@ -101,6 +103,7 @@ fun DesktopDesignApp(
         LocalHosts provides hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides knownHosts,
+        LocalSshKeyGenerator provides keyGenerator,
         LocalFeatures provides features,
     ) {
         if (vault != null) {

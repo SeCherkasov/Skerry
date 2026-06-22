@@ -26,7 +26,19 @@ import app.skerry.shared.ssh.KnownHostsStore
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
+import app.skerry.shared.vault.DataKey
+import app.skerry.shared.vault.IdentityStore
+import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.SshKeyGenerator
+import app.skerry.shared.vault.SshKeyType
+import app.skerry.shared.vault.UnlockResult
+import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultRecord
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.identity.IdentityDraft
+import app.skerry.ui.identity.IdentityKind
+import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
@@ -77,14 +89,17 @@ fun main() {
         "settings" -> state.openSettings()
     }
 
-    val hosts = if (live) seededHosts() else null
+    val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
+    val identities = if (live && keyGenerator != null) seededIdentities(keyGenerator) else null
+    val keyId = identities?.identities?.firstOrNull()?.id
+    val hosts = if (live) seededHosts(boundIdentityId = keyId) else null
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
     val knownHosts = if (live) seededKnownHosts() else null
 
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}) } } }
-        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts) } }
+        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, identities = identities, keyGenerator = keyGenerator) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -162,8 +177,11 @@ private fun GateScreenPreview(body: @Composable () -> Unit) {
     CompositionLocalProvider(LocalFonts provides fonts) { body() }
 }
 
-/** In-memory каталог хостов с демо-профилями — только для офскрин-рендера живого сайдбара. */
-private fun seededHosts(): HostManagerController {
+/**
+ * In-memory каталог хостов с демо-профилями — только для офскрин-рендера живого сайдбара. [boundIdentityId]
+ * (если задан) привязывается к паре хостов, чтобы раздел Vault показал блок «Used by hosts».
+ */
+private fun seededHosts(boundIdentityId: String? = null): HostManagerController {
     val store = object : HostStore {
         private val items = LinkedHashMap<String, Host>()
         override fun all(): List<Host> = items.values.toList()
@@ -171,13 +189,52 @@ private fun seededHosts(): HostManagerController {
         override fun remove(id: String) { items.remove(id) }
     }
     listOf(
-        Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production"),
-        Host("h2", "db-master", "192.168.1.50", 22, "root", "Production"),
+        Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production", identityId = boundIdentityId),
+        Host("h2", "db-master", "192.168.1.50", 22, "root", "Production", identityId = boundIdentityId),
         Host("h3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab"),
         Host("h4", "vps-edge", "vps.example.com", 2222, "deploy", null),
     ).forEach(store::put)
     var seq = 0
     return HostManagerController(store) { "gen-${seq++}" }
+}
+
+/**
+ * Менеджер identity поверх in-memory vault с одним сгенерированным ed25519-ключом и одним паролем —
+ * чтобы офскрин-рендер показал живой раздел Vault (карточки, отпечаток, used-by-hosts) реальными
+ * компонентами без файлов/мастер-пароля. Ключ генерируется настоящим [SshKeyGenerator].
+ */
+private fun seededIdentities(keyGenerator: SshKeyGenerator): IdentityManagerController {
+    var seq = 0
+    val controller = IdentityManagerController(IdentityStore(InMemoryVault())) { "id-${seq++}" }
+    val key = keyGenerator.generate(SshKeyType.ED25519, comment = "alice@skerry")
+    controller.save(IdentityDraft(label = "work-laptop", kind = IdentityKind.PRIVATE_KEY, privateKeyPem = key.privateKeyPem))
+    controller.save(IdentityDraft(label = "db-admin", kind = IdentityKind.PASSWORD, password = "hunter2"))
+    return controller
+}
+
+/** Тривиальный незашифрованный vault в памяти — только для офскрин-посева identity (не для приложения). */
+private class InMemoryVault : Vault {
+    private val records = LinkedHashMap<String, VaultRecord>()
+    private val payloads = LinkedHashMap<String, ByteArray>()
+
+    override fun exists(): Boolean = true
+    override val isUnlocked: Boolean = true
+    override fun create(password: CharArray) = Unit
+    override fun unlock(password: CharArray): UnlockResult = UnlockResult.Success
+    override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Success
+    override fun exportDataKey(): DataKey? = null
+    override fun lock() = Unit
+    override fun records(): List<VaultRecord> = records.values.filterNot { it.deleted }
+    override fun openPayload(id: String): ByteArray? = payloads[id]
+    override fun put(id: String, type: RecordType, payload: ByteArray) {
+        payloads[id] = payload
+        records[id] = VaultRecord(id, type, version = 1, updatedAt = "", deviceId = "screenshot", deleted = false, blob = ByteArray(0))
+    }
+    override fun remove(id: String) {
+        payloads.remove(id)
+        records[id]?.let { records[id] = it.copy(deleted = true) }
+    }
+    override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
 }
 
 /**

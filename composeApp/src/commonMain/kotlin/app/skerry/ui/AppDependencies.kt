@@ -1,6 +1,7 @@
 package app.skerry.ui
 
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
@@ -22,6 +23,8 @@ data class AppDependencies(
     val identities: IdentityManagerController? = null,
     /** Менеджер known-hosts (доверенные ключи + события смены ключа); `null` — подсистема не подключена. */
     val knownHosts: KnownHostsController? = null,
+    /** Генератор/инспектор SSH-ключей (раздел Vault); `null` — платформа без крипты ключей. */
+    val keyGenerator: SshKeyGenerator? = null,
     /** Биометрическая разблокировка vault; `null` — платформа без биометрии (desktop MVP). */
     val biometrics: VaultBiometrics? = null,
 )

@@ -14,6 +14,7 @@ import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.IonspinVaultCrypto
@@ -78,7 +79,9 @@ fun main() {
         ) { Instant.now().toString() }
         // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
         val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
-        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities, knownHosts = knownHosts)
+        // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
+        val keyGenerator = BouncyCastleSshKeyGenerator()
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities, knownHosts = knownHosts, keyGenerator = keyGenerator)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -103,6 +106,7 @@ fun main() {
                     transport = deps.transport,
                     identities = deps.identities,
                     knownHosts = deps.knownHosts,
+                    keyGenerator = deps.keyGenerator,
                 )
             }
         }
