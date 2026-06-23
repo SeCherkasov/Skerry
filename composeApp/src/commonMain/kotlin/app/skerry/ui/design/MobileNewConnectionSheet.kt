@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,8 +35,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
 /** Панель листа (`#0E1B26`); фон полей ввода — `#07141E` = [D.bg]. */
@@ -47,19 +52,33 @@ private val SheetPanel = Color(0xFF0E1B26)
  * [app.skerry.ui.host.HostManagerController] и закрывает лист; без него (превью) Save просто
  * закрывает. Переиспользует общий [NewConnectionFormState] (как desktop-модалка).
  *
- * Authentication — визуальная заглушка (привязка identity — отдельный слайс, как на desktop);
- * AI-политика спрятана за фича-флагом [FeatureFlags.ai] (Phase 2). Сохраняется базовый профиль.
+ * Authentication — живой [MobileAuthPicker] (паритет desktop `AuthPicker`): Ask / новый пароль /
+ * новый ключ / уже сохранённый keychain-секрет из [LocalCredentials]. Новый секрет запечатывается
+ * в открытый vault и привязывается к хосту через [NewConnectionFormState.resolveCredentialId];
+ * AI-политика спрятана за фича-флагом [FeatureFlags.ai] (Phase 2).
  */
 @Composable
 fun MobileNewConnectionSheet(state: MobileDesignState) {
     val hosts = LocalHosts.current
+    val credentials = LocalCredentials.current
     val form = remember { NewConnectionFormState() }
     val canSave = hosts == null || form.canSave
+    // Гард повторного Save (двойной тап) до закрытия листа — иначе дубль секрета+хоста в vault (как desktop).
+    var submitting by remember { mutableStateOf(false) }
     val onSave = {
-        if (hosts != null && form.canSave) {
-            hosts.save(form.toDraft())
-            state.closeSheet()
+        if (submitting) {
+            // повторное нажатие до закрытия — игнорируем
         } else if (hosts == null) {
+            state.closeSheet() // мок/превью: сохранять некуда
+        } else if (form.canSave) {
+            submitting = true
+            // Новый секрет создаём только при живом keychain (иначе он осел бы в vault без ссылки на хост);
+            // ASK/мок-путь → credentialId = null. EXISTING-привязка возвращается как есть (не пересоздаём).
+            val credentialId = form.resolveCredentialId(saveCredential = { draft -> credentials?.save(draft) })
+            hosts.save(form.toDraft(credentialId = credentialId))
+            // Секрет уже запечатан в vault — снимаем ссылки на него из state формы, сокращая окно
+            // жизни ключа/пароля в куче (String на JVM не занулить на месте, но ссылку убираем).
+            form.password = ""; form.privateKeyPem = ""; form.passphrase = ""
             state.closeSheet()
         }
     }
@@ -129,8 +148,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 }
             }
             Spacer(Modifier.height(14.dp))
-            // Authentication — заглушка-селект (привязка identity отдельным слайсом, как на desktop).
-            SheetField("Authentication") { SheetSelect("SSH key · id_ed25519") }
+            SheetField("Authentication") { MobileAuthPicker(form) }
 
             if (LocalFeatures.current.ai) {
                 Spacer(Modifier.height(14.dp))
@@ -169,56 +187,170 @@ private fun SheetField(label: String, modifier: Modifier = Modifier, content: @C
     }
 }
 
-/** Текстовое поле листа в стиле макета (тёмный фон + cyan-рамка, радиус 11). */
+/**
+ * Текстовое поле листа в стиле макета (тёмный фон + cyan-рамка, радиус 11).
+ * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
+ * многострочная моноширинная область для вставки приватного ключа (PEM), как desktop `ModalTextField`.
+ */
 @Composable
 private fun SheetInput(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
     keyboardType: KeyboardType = KeyboardType.Text,
+    masked: Boolean = false,
+    singleLine: Boolean = true,
+    mono: Boolean = false,
+    minHeightDp: Int? = null,
 ) {
-    val ui = LocalFonts.current.ui
-    val textStyle = remember(ui) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = ui) }
+    val fonts = LocalFonts.current
+    val family = if (mono) fonts.mono else fonts.ui
+    val fontSize = if (mono) 12.5.sp else 15.sp
+    val textStyle = remember(family, fontSize) {
+        TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
+    }
     // Рамка/паддинг — в decorationBox, чтобы клик по всей площади поля ставил каретку.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        singleLine = true,
+        singleLine = singleLine,
         textStyle = textStyle,
         cursorBrush = SolidColor(D.cyan),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Box(
                 Modifier
                     .fillMaxWidth()
+                    .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
                     .clip(RoundedCornerShape(11.dp))
                     .background(D.bg)
                     .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
                     .padding(horizontal = 14.dp, vertical = 13.dp),
             ) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
                 inner()
             }
         },
     )
 }
 
-/** Заглушка-селект (значение + шеврон) в стиле полей листа. */
+/**
+ * Выбор аутентификации хоста в стиле мобильного листа (паритет desktop `AuthPicker`): селект-триггер
+ * раскрывает варианты — Ask every time / новый пароль / новый ключ / уже сохранённые keychain-секреты
+ * из живого [LocalCredentials] — плюс инлайн-поля под новый секрет. В мок-пути (без vault) остаются
+ * только варианты без сохранения.
+ */
 @Composable
-private fun SheetSelect(value: String) {
+private fun MobileAuthPicker(form: NewConnectionFormState) {
+    val credentials = LocalCredentials.current
+    val saved = credentials?.credentials ?: emptyList()
+    var menuOpen by remember { mutableStateOf(false) }
+    val selectedLabel = when (form.authMode) {
+        AuthMode.ASK -> "Ask every time"
+        AuthMode.NEW_PASSWORD -> "Password"
+        AuthMode.NEW_KEY -> "Private key"
+        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { "${it.label} (saved)" } ?: "Select credential…"
+    }
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(11.dp))
+                .background(D.bg)
+                .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Txt(selectedLabel, color = D.text, size = 15.sp)
+            Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+        }
+        if (menuOpen) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(SheetPanel)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .padding(vertical = 4.dp),
+            ) {
+                MobileAuthOption("vpn_key_off", "Ask every time", "password requested on connect", form.authMode == AuthMode.ASK) {
+                    form.authMode = AuthMode.ASK; menuOpen = false
+                }
+                MobileAuthOption("password", "Password…", "store a password in your vault", form.authMode == AuthMode.NEW_PASSWORD) {
+                    form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
+                }
+                MobileAuthOption("key", "Paste private key…", "store an SSH key in your vault", form.authMode == AuthMode.NEW_KEY) {
+                    form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                }
+                // Разделитель перед сохранёнными секретами (паритет desktop AuthPicker).
+                if (saved.isNotEmpty()) {
+                    HLine(modifier = Modifier.padding(vertical = 4.dp))
+                    saved.forEach { cred ->
+                        MobileAuthOption(cred.secret.pickerIcon(), cred.label, cred.secret.pickerTypeLabel(), form.authMode == AuthMode.EXISTING && form.existingCredentialId == cred.id) {
+                            form.authMode = AuthMode.EXISTING; form.existingCredentialId = cred.id; menuOpen = false
+                        }
+                    }
+                }
+            }
+        }
+        when (form.authMode) {
+            AuthMode.NEW_PASSWORD -> {
+                Spacer(Modifier.height(12.dp))
+                SheetInput(form.password, { form.password = it }, "password to store", masked = true)
+            }
+            AuthMode.NEW_KEY -> {
+                Spacer(Modifier.height(12.dp))
+                // keyboardType=Password гасит автокоррект/подсказки IME (Android), чтобы ключ не оседал в словаре.
+                // PEM показываем в открытую (не masked): маскирование многострочного поля ломает вставку
+                // ключа и его визуальную проверку — осознанный trade-off, как на desktop ModalTextField.
+                SheetInput(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 104)
+                Spacer(Modifier.height(12.dp))
+                SheetInput(form.passphrase, { form.passphrase = it }, "key passphrase (optional)", masked = true)
+            }
+            else -> {}
+        }
+    }
+}
+
+/** Человеко-тип keychain-секрета для строки выбора в [MobileAuthPicker]. */
+private fun CredentialSecret.pickerTypeLabel(): String = when (this) {
+    is CredentialSecret.Password -> "Password"
+    is CredentialSecret.PrivateKey -> "SSH key"
+    is CredentialSecret.Certificate -> "Certificate"
+}
+
+/** Material-иконка типа keychain-секрета для строки выбора в [MobileAuthPicker]. */
+private fun CredentialSecret.pickerIcon(): String = when (this) {
+    is CredentialSecret.Password -> "password"
+    is CredentialSecret.PrivateKey -> "key"
+    is CredentialSecret.Certificate -> "workspace_premium"
+}
+
+/** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */
+@Composable
+private fun MobileAuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(11.dp))
-            .background(D.bg)
-            .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-            .padding(horizontal = 14.dp, vertical = 13.dp),
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            // Без явного interactionSource (паритет desktop AuthOption): remember в forEach позиционен —
+            // при смене порядка saved слот сдвинулся бы на чужую строку.
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Txt(value, color = D.text, size = 15.sp)
-        Sym("expand_more", size = 20.sp, color = D.faint)
+        Sym(icon, size = 18.sp, color = if (selected) D.cyanBright else D.dim)
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = if (selected) D.cyanBright else D.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = D.faint, size = 11.sp)
+        }
+        if (selected) Sym("check", size = 17.sp, color = D.cyanBright)
     }
 }
 

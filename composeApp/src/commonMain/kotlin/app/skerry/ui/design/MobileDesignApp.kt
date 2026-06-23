@@ -171,7 +171,11 @@ private fun MobileChrome(
         }
     }
 
-    CompositionLocalProvider(LocalConnectHost provides connectHost) {
+    CompositionLocalProvider(
+        LocalConnectHost provides connectHost,
+        // Keychain открытого vault — нужен листу «New connection» для выбора/создания секрета (паритет desktop).
+        LocalCredentials provides credentials,
+    ) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val route = state.route
             Box(Modifier.fillMaxSize()) {
