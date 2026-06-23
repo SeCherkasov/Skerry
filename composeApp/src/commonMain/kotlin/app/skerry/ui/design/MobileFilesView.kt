@@ -208,12 +208,20 @@ private fun MobileLivePane(
     var renaming by remember(pane) { mutableStateOf<FileItem?>(null) }
     var deleting by remember(pane) { mutableStateOf<FileItem?>(null) }
 
+    // Новый каталог всегда показываем с начала. Панель НЕ перезагружается через Loading
+    // (reload() сразу ставит Loaded), поэтому скролл-колонка переживает смену каталога, и без
+    // явного сброса verticalScroll унаследовал бы прокрутку предыдущего каталога — остаточный
+    // офсет (после флинга/оверскролла) переносился бы в новый листинг, и список «прыгал» бы на
+    // пару пикселей при каждом переходе. Сбрасываем в начало при смене пути (scrollTo — мгновенно).
+    val scroll = rememberScrollState()
+    LaunchedEffect(pane.path) { scroll.scrollTo(0) }
+
     Box(modifier.fillMaxWidth()) {
         when (val st = pane.state) {
             FilePaneState.Loading -> MobileFilesNoticeBox("sync", "Loading…", null, D.faint)
             is FilePaneState.Error -> MobileFilesNoticeBox("error", "Error", st.message, D.sunset)
             is FilePaneState.Loaded -> Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp, start = 12.dp, end = 12.dp),
+                Modifier.fillMaxSize().verticalScroll(scroll).padding(top = 12.dp, start = 12.dp, end = 12.dp),
             ) {
                 if (pane.path != "/") {
                     MobileFileUpRow(mono, onClick = pane::goUp)

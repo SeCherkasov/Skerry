@@ -65,19 +65,11 @@ class FilePaneController(
     /** Войти в каталог [item]; для файла — no-op. Сбрасывает выделение (новый каталог). */
     fun open(item: FileItem) {
         if (item.type != FileItemType.Directory) return
-        op {
-            path = item.path
-            resetSelection()
-            reload()
-        }
+        op { navigateTo(item.path) }
     }
 
     /** Подняться в родительский каталог. Сбрасывает выделение. */
-    fun goUp() = op {
-        path = parentPath(path)
-        resetSelection()
-        reload()
-    }
+    fun goUp() = op { navigateTo(parentPath(path)) }
 
     /** Перечитать текущий каталог. */
     fun refresh() = op { reload() }
@@ -142,17 +134,36 @@ class FilePaneController(
     fun selectedItems(): List<FileItem> =
         (state as? FilePaneState.Loaded)?.entries?.filter { it.path in selection } ?: emptyList()
 
-    /** Перечитать [path], отсортировать листинг и подчистить выделение от исчезнувших путей. */
+    /**
+     * Перейти в каталог [target] АТОМАРНО: сперва загружаем его листинг, и только потом одним снимком
+     * меняем path+state+выделение. Иначе path менялся бы раньше entries — старый список «висел» бы под
+     * новым путём, а строка «..» (зависит от path) мигала бы сразу, давая видимый подскок/«пересортировку
+     * в момент отрисовки» при каждом переходе (баг проявлялся и на desktop, и на mobile — общий слой).
+     * До прихода листинга панель показывает прежний каталог без изменений. Ошибку листинга показываем
+     * уже на новом пути (пользователь видит, куда пытался зайти).
+     */
+    private suspend fun navigateTo(target: String) {
+        val next = loadState(target)
+        path = target
+        state = next
+        resetSelection() // новый каталог — выделение пустое; pruneSelection не нужен (нечего чистить)
+    }
+
+    /** Перечитать текущий [path] на месте (refresh/после mkdir/rename/delete — путь не меняется). */
     private suspend fun reload() {
-        state = try {
-            FilePaneState.Loaded(browser.list(path).sortedForPane())
-        } catch (e: FileBrowserException) {
-            FilePaneState.Error(e.message ?: "Ошибка файловой панели")
-        }
+        state = loadState(path)
         // На Error выделение сохраняется намеренно (no-op): пользователь видит ошибку и прежнюю
         // подсветку, может повторить. Чистим только при успешном листинге.
         pruneSelection()
     }
+
+    /** Загрузить и отсортировать листинг [target] в [FilePaneState] (без записи в поля стора). */
+    private suspend fun loadState(target: String): FilePaneState =
+        try {
+            FilePaneState.Loaded(browser.list(target).sortedForPane())
+        } catch (e: FileBrowserException) {
+            FilePaneState.Error(e.message ?: "Ошибка файловой панели")
+        }
 
     /** Убрать из выделения/якоря пути, которых больше нет в текущем листинге (удалённые, перемещённые). */
     private fun pruneSelection() {
@@ -170,6 +181,10 @@ class FilePaneController(
      * Запустить операцию панели, сериализуя её флагом [busy]. Любая [FileBrowserException] из самой
      * операции (mkdir/rename/…) переводит панель в [FilePaneState.Error] — каждый путь к источнику
      * под защитой, не только [reload].
+     *
+     * [busy] — обычный (не `@Volatile`) флаг: рассчитываем, что [scope] однопоточный/Main-confined
+     * (вызовы идут из UI-обработчиков, продолжение после suspend возвращается туда же). При
+     * многопоточном диспетчере read/write [busy] стали бы гонкой — тогда сериализацию надо усилить.
      */
     private fun op(block: suspend () -> Unit) {
         if (busy) return

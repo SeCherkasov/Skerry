@@ -6,6 +6,7 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.ui.sftp.FakeSftpClient
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -76,6 +77,43 @@ class FilePaneControllerTest {
         val c = started(seededBrowserWithNested())
 
         c.open(c.entry("alpha"))
+        advanceUntilIdle()
+
+        assertEquals("$HOME/alpha", c.path)
+        assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `open keeps the old path and entries until the new listing is ready`() = runTest {
+        // Регресс: path менялся синхронно, а entries приезжали асинхронно — старый список «висел»
+        // под новым путём (и строка «..», зависящая от path, мигала), давая видимый подскок при
+        // каждом переходе на desktop и mobile. Навигация обязана быть атомарной: грузим листинг,
+        // затем одним снимком меняем path+entries. «Ворота» держат листинг alpha, чтобы поймать
+        // промежуточное состояние.
+        val base = seededBrowserWithNested()
+        val gate = CompletableDeferred<Unit>()
+        val gated = object : FileBrowser {
+            override val label: String get() = base.label
+            override suspend fun realpath(path: String): String = base.realpath(path)
+            override suspend fun list(path: String): List<FileItem> {
+                if (path == "$HOME/alpha") gate.await()
+                return base.list(path)
+            }
+            override suspend fun mkdir(path: String) = base.mkdir(path)
+            override suspend fun delete(item: FileItem) = base.delete(item)
+            override suspend fun rename(from: String, to: String) = base.rename(from, to)
+        }
+        val c = FilePaneController(gated, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        c.start(); advanceUntilIdle()
+        val alpha = c.entry("alpha")
+
+        c.open(alpha)
+        advanceUntilIdle() // дошли до ожидания на воротах: листинг alpha ещё не вернулся
+
+        assertEquals(HOME, c.path)
+        assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
+
+        gate.complete(Unit)
         advanceUntilIdle()
 
         assertEquals("$HOME/alpha", c.path)
