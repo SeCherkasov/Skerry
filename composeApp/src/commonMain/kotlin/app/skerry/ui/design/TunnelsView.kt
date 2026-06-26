@@ -303,7 +303,7 @@ private fun TunnelEditor(
         EditField(label, { label = it }, "web tunnel", mono)
         Box(Modifier.padding(bottom = 12.dp))
         FieldLabel("Type")
-        ClickableSelect(directionDisplay(direction)) { direction = direction.next() }
+        TypePicker(direction, onPick = { direction = it })
         Box(Modifier.padding(bottom = 12.dp))
         FieldLabel("Via host")
         HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
@@ -347,6 +347,40 @@ private fun TunnelEditor(
             }
         }
     }
+}
+
+/** Выпадающий список типа туннеля (-L/-R/-D) поверх формы (через [AnchoredDropdown]). */
+@Composable
+private fun TypePicker(current: TunnelDirection, onPick: (TunnelDirection) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { open = !open }.background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(directionDisplay(current), color = D.text, size = 12.5.sp)
+                Sym("expand_more", size = 16.sp, color = D.faint)
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)),
+            ) {
+                listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
+                    Txt(
+                        directionDisplay(option),
+                        color = if (option == current) D.cyanBright else D.text,
+                        size = 12.5.sp,
+                        modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 12.dp, vertical = 9.dp),
+                    )
+                }
+            }
+        },
+    )
 }
 
 /** Выпадающий список хостов поверх формы (через [AnchoredDropdown]); пустой — подсказка добавить хост. */
@@ -395,12 +429,6 @@ private fun directionBadge(direction: TunnelDirection): String = when (direction
     TunnelDirection.Local -> "LOCAL"
     TunnelDirection.Remote -> "REMOTE"
     TunnelDirection.Dynamic -> "SOCKS"
-}
-
-private fun TunnelDirection.next(): TunnelDirection = when (this) {
-    TunnelDirection.Local -> TunnelDirection.Remote
-    TunnelDirection.Remote -> TunnelDirection.Dynamic
-    TunnelDirection.Dynamic -> TunnelDirection.Local
 }
 
 private fun directionDisplay(direction: TunnelDirection): String = when (direction) {
@@ -525,19 +553,6 @@ private fun FieldLabel(text: String) {
 private fun SelectField(value: String) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(value, color = D.text, size = 12.5.sp)
-        Sym("expand_more", size = 16.sp, color = D.faint)
-    }
-}
-
-/** Кликабельный селект: тот же стиль, что [SelectField], но циклически меняет значение по тапу. */
-@Composable
-private fun ClickableSelect(value: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
