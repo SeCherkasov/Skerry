@@ -56,6 +56,7 @@ import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
+import app.skerry.ui.snippet.snippetTagSuggestions
 
 private data class MockSnippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
 
@@ -208,7 +209,8 @@ private fun SnippetEditor(
             id = entry?.id,
             label = label.trim(),
             command = command,
-            tags = tags,
+            // Дослать недозафиксированный черновик тега (набран, но не нажат Enter/запятая перед Save).
+            tags = (tags + parseSnippetTags(tagDraft)).distinct(),
             shortcut = shortcut,
         ),
     )
@@ -235,17 +237,29 @@ private fun SnippetEditor(
             }
             Column(Modifier.padding(top = 20.dp)) {
                 FieldLabelSnip("Tags")
+                // Подсказки из других сниппетов (свой исключаем: иначе только что снятый тег вернулся
+                // бы в список). Мемоизация — чтобы правка label/command не пересчитывала скан.
+                val tagSugs = remember(manager.snippets, tags, tagDraft, entry?.id) {
+                    snippetTagSuggestions(manager.snippets.filter { it.id != entry?.id }.map { it.snippet }, tags, tagDraft)
+                }
                 SnipTagsField(
                     tags = tags,
                     draft = tagDraft,
                     onDraftChange = { v -> if (v.contains(',')) addTags(v) else tagDraft = v },
                     onCommit = { addTags(tagDraft) },
                     onRemove = { tag -> tags = tags - tag },
+                    suggestions = tagSugs,
+                    onPick = { tag -> tags = (tags + tag).distinct(); tagDraft = "" },
                 )
             }
             Column(Modifier.padding(top = 20.dp).width(220.dp)) {
                 FieldLabelSnip("Shortcut")
-                ShortcutField(shortcut, mono) { shortcut = it }
+                // Коллизию считаем по другим сниппетам (свой хоткей не конфликт): UI не даёт занять
+                // один аккорд дважды, чего [SnippetManager.forShortcut] на чтении не гарантирует.
+                val conflict = remember(manager.snippets, shortcut, entry?.id) {
+                    shortcut?.let { manager.shortcutConflict(it, entry?.id) }
+                }
+                ShortcutField(shortcut, mono, conflictLabel = conflict?.snippet?.label) { shortcut = it }
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
@@ -286,32 +300,65 @@ private fun SnipTagsField(
     onDraftChange: (String) -> Unit,
     onCommit: () -> Unit,
     onRemove: (String) -> Unit,
+    suggestions: List<String>,
+    onPick: (String) -> Unit,
 ) {
     val mono = LocalFonts.current.mono
-    FlowRow(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        tags.forEach { tag -> key(tag) { SnipTagPill(tag) { onRemove(tag) } } }
-        val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
-        BasicTextField(
-            value = draft,
-            onValueChange = onDraftChange,
-            singleLine = true,
-            textStyle = textStyle,
-            cursorBrush = SolidColor(D.cyan),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onCommit() }),
-            modifier = Modifier.widthIn(min = 72.dp),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 12.5.sp, font = mono)
-                    inner()
+    var focused by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = focused && suggestions.isNotEmpty(),
+        onDismiss = { focused = false },
+        focusable = false, // не красть фокус у поля ввода тега
+        trigger = {
+            FlowRow(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                tags.forEach { tag -> key(tag) { SnipTagPill(tag) { onRemove(tag) } } }
+                val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    singleLine = true,
+                    textStyle = textStyle,
+                    cursorBrush = SolidColor(D.cyan),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { onCommit() }),
+                    modifier = Modifier.widthIn(min = 72.dp).onFocusChanged { focused = it.isFocused },
+                    decorationBox = { inner ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 12.5.sp, font = mono)
+                            inner()
+                        }
+                    },
+                )
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier
+                    .width(width)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(D.surface2)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    .heightIn(max = 220.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 4.dp),
+            ) {
+                // Тап добавляет тег; фокус остаётся на поле — меню пересчитается без только что добавленного.
+                suggestions.forEach { tag ->
+                    key(tag) {
+                        Box(
+                            Modifier.fillMaxWidth().clickable { onPick(tag) }.padding(horizontal = 12.dp, vertical = 9.dp),
+                        ) {
+                            Txt("#$tag", color = D.cyanBright, size = 12.5.sp, font = mono)
+                        }
+                    }
                 }
-            },
-        )
-    }
+            }
+        },
+    )
 }
 
 @Composable
@@ -331,35 +378,47 @@ private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
 // --- Захват горячей клавиши сниппета ---
 
 @Composable
-private fun ShortcutField(value: String?, mono: FontFamily, onCapture: (String?) -> Unit) {
+private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: String?, onCapture: (String?) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(7.dp))
-            .background(D.bg)
-            .border(1.dp, if (focused) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
-            .focusRequester(requester)
-            .onFocusChanged { focused = it.isFocused }
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (event.key) {
-                    // Очистка хоткея: Esc/Backspace/Delete снимают назначение.
-                    Key.Escape, Key.Backspace, Key.Delete -> { onCapture(null); true }
-                    else -> {
-                        val s = SnippetShortcut.format(
-                            event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
-                        )
-                        if (s != null) { onCapture(s); true } else false
+    val hasConflict = conflictLabel != null
+    Column {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(7.dp))
+                .background(D.bg)
+                .border(1.dp, if (hasConflict) D.storm else if (focused) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+                .focusRequester(requester)
+                .onFocusChanged { focused = it.isFocused }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        // Очистка хоткея: Esc/Backspace/Delete снимают назначение.
+                        Key.Escape, Key.Backspace, Key.Delete -> { onCapture(null); true }
+                        else -> {
+                            val s = SnippetShortcut.format(
+                                event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
+                            )
+                            if (s != null) { onCapture(s); true } else false
+                        }
                     }
                 }
-            }
-            .clickable { requester.requestFocus() }
-            .padding(horizontal = 11.dp, vertical = 9.dp),
-    ) {
-        val text = value ?: if (focused) "Press keys…" else "—"
-        Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
+                .clickable { requester.requestFocus() }
+                .padding(horizontal = 11.dp, vertical = 9.dp),
+        ) {
+            val text = value ?: if (focused) "Press keys…" else "—"
+            Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
+        }
+        // Аккорд уже занят другим сниппетом — назначение остаётся (поле захватывает аккорд), но
+        // предупреждаем явно; на сохранении ничего не блокируем, выбор за пользователем.
+        if (conflictLabel != null) {
+            Txt(
+                "Already used by \"$conflictLabel\"",
+                color = D.storm, size = 11.sp,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
     }
 }
 
