@@ -603,6 +603,72 @@ private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) ->
     }
 }
 
+/**
+ * Диалог «Rename group» (карандаш у заголовка папки) — полноэкранный оверлей на корне над клавиатурой
+ * ([imePadding]), паритет [MobileGroupCreateDialog]. Поле имени предзаполнено [initialName]; «Save»
+ * переименовывает (хосты переезжают с группой), «Delete group» — разгруппировывает (профили целы).
+ * Пустое/неизменное имя оставляет «Save» неактивной. Зеркалит desktop [GroupDialog] в режиме правки.
+ */
+@Composable
+internal fun MobileGroupRenameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    val canSave = name.isNotBlank() && name.trim() != initialName
+    // Триммим здесь, чтобы и контроллер (Host.group), и синхронизация collapsedGroups получили
+    // одинаковый канонический ключ — иначе свёрнутость папки разъедется на хвостовом пробеле.
+    val submit = { if (canSave) onSave(name.trim()) }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xB304080C))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .padding(horizontal = 32.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(SheetPanel)
+                .border(1.dp, D.cyan14, RoundedCornerShape(18.dp))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+                .padding(20.dp),
+        ) {
+            Txt("Rename group", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Txt("Hosts in this group move with the new name.", color = D.dim, size = 12.5.sp)
+            Spacer(Modifier.height(14.dp))
+            SheetInput(name, { name = it }, "Production")
+            Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDelete)
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                ) {
+                    Txt("Delete group", color = D.sunset, size = 15.sp, weight = FontWeight.Medium)
+                }
+                Spacer(Modifier.weight(1f))
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (canSave) D.cyan else D.cyan.copy(alpha = 0.4f))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
+                        .padding(horizontal = 18.dp, vertical = 13.dp),
+                ) {
+                    Txt("Save", color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 /** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */
 @Composable
 private fun MobileAuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {

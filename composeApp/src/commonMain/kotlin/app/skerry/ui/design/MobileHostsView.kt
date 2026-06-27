@@ -117,6 +117,11 @@ private fun MobileHostFolder(
     val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
     val collapsed = state.isGroupCollapsed(folder.name)
     val onToggle = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
+    // Карандаш правки в заголовке — только в живом каталоге и кроме синтетической корзины «Ungrouped»
+    // (её не переименовать). Паритет desktop-`LiveHostFolder`. remember безусловный (стабильная
+    // позиция в слот-таблице), видимость карандаша даёт takeIf.
+    val onEdit = remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
+        .takeIf { controller != null && folder.name != UNGROUPED_LABEL }
     // Подсветка целевой папки, пока над ней тащат хост.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
     val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
@@ -139,7 +144,7 @@ private fun MobileHostFolder(
             Modifier
         }
         Box(headerMod) {
-            MobileFolderHeader(folder.name, folder.hosts.size, collapsed, isDropTarget, onToggle)
+            MobileFolderHeader(folder.name, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit)
         }
         // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
         if (!collapsed) {
@@ -282,12 +287,21 @@ private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -
 }
 
 /**
- * Заголовок секции-папки: шеврон свёртки + капс-имя + счётчик хостов. Клик переключает свёрнутость —
- * хит-зона строго на шевроне ([onToggle]), чтобы тап-свёртка не конфликтовала с drag-перетаскиванием
+ * Заголовок секции-папки: шеврон свёртки + капс-имя + (карандаш правки) + счётчик хостов. Клик по
+ * шеврону переключает свёрнутость, клик по карандашу открывает диалог Rename/Delete группы — хит-зоны
+ * строго на иконках ([onToggle]/[onEdit]), чтобы тапы не конфликтовали с drag-перетаскиванием
  * заголовка (reorder папок), как на desktop. [dropTarget] подсвечивает капс-имя при сбросе хоста сюда.
+ * [onEdit] == null для синтетического «Ungrouped» и пути превью (карандаш скрыт).
  */
 @Composable
-private fun MobileFolderHeader(name: String, count: Int, collapsed: Boolean, dropTarget: Boolean, onToggle: () -> Unit) {
+private fun MobileFolderHeader(
+    name: String,
+    count: Int,
+    collapsed: Boolean,
+    dropTarget: Boolean,
+    onToggle: () -> Unit,
+    onEdit: (() -> Unit)?,
+) {
     Row(
         Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -312,8 +326,23 @@ private fun MobileFolderHeader(name: String, count: Int, collapsed: Boolean, dro
             size = 12.sp,
             weight = FontWeight.SemiBold,
             letterSpacing = 0.6.sp,
-            modifier = Modifier.weight(1f),
         )
+        if (onEdit != null) {
+            Box(
+                Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onEdit,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Sym("edit", size = 14.sp, color = D.faint)
+            }
+        }
+        Spacer(Modifier.weight(1f))
         Txt(count.toString(), color = D.faint, size = 11.sp)
     }
 }

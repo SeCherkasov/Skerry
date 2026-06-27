@@ -189,6 +189,77 @@ class MobileDesignStateTest {
         assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
     }
 
+    // Переименование/удаление групп хостов (карандаш у заголовка папки; паритет desktop)
+
+    @Test
+    fun rename_group_dialog_opens_and_dismisses() {
+        val s = MobileDesignState()
+        assertNull(s.renamingGroup)
+        s.openRenameGroup("Production")
+        assertEquals("Production", s.renamingGroup)
+        s.dismissRenameGroup()
+        assertNull(s.renamingGroup)
+    }
+
+    @Test
+    fun on_group_renamed_moves_collapsed_membership_and_reports() {
+        // Свёрнутая папка остаётся свёрнутой под новым именем; персист получает обновлённый набор.
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(initialCollapsedGroups = setOf("Production"), onCollapsedGroupsChange = { seen += it })
+        s.onGroupRenamed("Production", "Prod")
+        assertFalse(s.isGroupCollapsed("Production"))
+        assertTrue(s.isGroupCollapsed("Prod"))
+        assertEquals(listOf(setOf("Prod")), seen)
+    }
+
+    @Test
+    fun on_group_renamed_no_collapse_entry_is_silent() {
+        // Группа не была свёрнута → синхронить нечего, колбэк персиста молчит.
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(onCollapsedGroupsChange = { seen += it })
+        s.onGroupRenamed("Production", "Prod")
+        assertTrue(seen.isEmpty())
+    }
+
+    @Test
+    fun on_group_renamed_blank_or_unchanged_is_noop() {
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(initialCollapsedGroups = setOf("Production"), onCollapsedGroupsChange = { seen += it })
+        s.onGroupRenamed("Production", "Production") // то же имя
+        s.onGroupRenamed("Production", "   ")        // пустое после trim
+        assertTrue(s.isGroupCollapsed("Production"))
+        assertTrue(seen.isEmpty())
+    }
+
+    @Test
+    fun on_group_renamed_trims_surrounding_whitespace() {
+        // Хвостовые пробелы режутся → ключ свёрнутости совпадает с тем, что контроллер запишет в Host.group.
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(initialCollapsedGroups = setOf("Production"), onCollapsedGroupsChange = { seen += it })
+        s.onGroupRenamed("Production", "  Prod  ")
+        assertTrue(s.isGroupCollapsed("Prod"))
+        assertFalse(s.isGroupCollapsed("Production"))
+        assertEquals(listOf(setOf("Prod")), seen)
+    }
+
+    @Test
+    fun on_group_deleted_drops_collapsed_membership_and_reports() {
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(initialCollapsedGroups = setOf("Production", "Homelab"), onCollapsedGroupsChange = { seen += it })
+        s.onGroupDeleted("Production")
+        assertFalse(s.isGroupCollapsed("Production"))
+        assertTrue(s.isGroupCollapsed("Homelab"))
+        assertEquals(listOf(setOf("Homelab")), seen)
+    }
+
+    @Test
+    fun on_group_deleted_when_not_collapsed_is_silent() {
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(onCollapsedGroupsChange = { seen += it })
+        s.onGroupDeleted("Production")
+        assertTrue(seen.isEmpty())
+    }
+
     private fun sampleHost(): Host =
         Host(id = "host-42", label = "prod-web-01", address = "192.168.1.45", username = "root")
 }

@@ -101,6 +101,41 @@ class MobileDesignState(
         onCollapsedGroupsChange(collapsedGroups)
     }
 
+    /**
+     * Имя группы, открытой диалогом «Rename group» (карандаш у заголовка папки), либо `null` — диалог
+     * закрыт. Переименование/удаление профилей делает [app.skerry.ui.host.HostManagerController]; этот
+     * стор синхронизирует только side-channel свёрнутости ([onGroupRenamed]/[onGroupDeleted]).
+     */
+    var renamingGroup: String? by mutableStateOf(null); private set
+
+    /** Открыть диалог правки группы [name] (карандаш у заголовка папки). */
+    fun openRenameGroup(name: String) { renamingGroup = name }
+
+    /** Закрыть диалог правки группы. */
+    fun dismissRenameGroup() { renamingGroup = null }
+
+    /**
+     * Синхронизировать свёрнутость при переименовании группы [old]→[new] (профили правит контроллер):
+     * свёрнутая папка остаётся свёрнутой под новым именем. Имя триммится; пустое/неизменное — no-op,
+     * как [DesktopDesignState.renameGroupName]. Колбэк персиста вызывается только при реальной правке.
+     */
+    fun onGroupRenamed(old: String, new: String) {
+        val n = new.trim().filterNot { it == '\n' || it == '\r' }
+        if (n.isEmpty() || n == old) return
+        if (old in collapsedGroups) {
+            collapsedGroups = collapsedGroups - old + n
+            onCollapsedGroupsChange(collapsedGroups)
+        }
+    }
+
+    /** Синхронизировать свёрнутость при удалении группы [name] (профили разгруппировывает контроллер). */
+    fun onGroupDeleted(name: String) {
+        if (name in collapsedGroups) {
+            collapsedGroups = collapsedGroups - name
+            onCollapsedGroupsChange(collapsedGroups)
+        }
+    }
+
     /** Открыть лист в режиме создания нового хоста (форма пустая). */
     fun openNewConn() { editingHost = null; sheetNewConn = true }
 
