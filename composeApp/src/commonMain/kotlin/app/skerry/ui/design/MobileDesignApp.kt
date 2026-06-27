@@ -208,6 +208,25 @@ private fun MobileChrome(
             if (state.sheetNewConn) {
                 MobileNewConnectionSheet(state)
             }
+            // Карандаш у заголовка папки → диалог Rename/Delete группы. Профили правит контроллер
+            // (renameGroup/deleteGroup), стор синхронизирует свёрнутость. Паритет desktop GroupDialog.
+            state.renamingGroup?.let { groupName ->
+                val hosts = LocalHosts.current
+                MobileGroupRenameDialog(
+                    initialName = groupName,
+                    onDismiss = state::dismissRenameGroup,
+                    onSave = { newName ->
+                        hosts?.renameGroup(groupName, newName)
+                        state.onGroupRenamed(groupName, newName)
+                        state.dismissRenameGroup()
+                    },
+                    onDelete = {
+                        hosts?.deleteGroup(groupName)
+                        state.onGroupDeleted(groupName)
+                        state.dismissRenameGroup()
+                    },
+                )
+            }
             pending?.let { (host, dest) ->
                 MobilePasswordSheet(
                     host = host,
