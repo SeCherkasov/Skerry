@@ -114,7 +114,7 @@ private fun MoreRow(
     if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
 }
 
-// ──────────────────────────────────────── профиль ────────────────────────────────────────
+// Профиль.
 
 /**
  * Живая карточка профиля: аккаунт/sync — Phase 2, поэтому показываем честную локальную сущность

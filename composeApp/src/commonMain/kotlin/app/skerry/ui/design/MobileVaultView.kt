@@ -72,7 +72,7 @@ fun MobileVaultScreen(state: MobileDesignState) {
     }
 }
 
-// ──────────────────────────────────────── живой путь ────────────────────────────────────────
+// Живой путь.
 
 @Composable
 private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialManagerController) {
@@ -216,7 +216,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     }
 }
 
-// ──────────────────────────────────────── шапка/категории/действие ──────────────────────────
+// Шапка, категории, действие.
 
 @Composable
 private fun MobileVaultBanner() {
@@ -279,7 +279,7 @@ private fun MobileVaultAction(
     }
 }
 
-// ──────────────────────────────────────── карточка секрета ──────────────────────────────────
+// Карточка секрета.
 
 /** Карточка keychain-секрета (ключ/пароль/сертификат) в списке категории. */
 @Composable
@@ -353,7 +353,7 @@ private fun MobileVaultEmpty(category: VaultCategoryKind) {
     }
 }
 
-// ──────────────────────────────────────── лист деталей секрета ──────────────────────────────
+// Лист деталей секрета.
 
 /**
  * Нижний лист деталей выбранного секрета — мобильный аналог desktop-панели [VaultView] LiveSecretDetail:
@@ -454,7 +454,7 @@ private fun MobileSecretDetailSheet(
     }
 }
 
-// ──────────────────────────────────────── превью (макет) ────────────────────────────────────────
+// Превью (макет).
 
 /** Статичный макет таба Vault (офскрин/превью без открытого keychain) — карточки 1:1 с `Skerry Mobile.html`. */
 @Composable

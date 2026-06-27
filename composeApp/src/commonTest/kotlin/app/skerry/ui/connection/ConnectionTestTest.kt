@@ -80,7 +80,7 @@ class ConnectionTestTest {
         assertEquals(ConnectionTestStatus.Failure("Connection failed"), status)
     }
 
-    // --- Контроллер: переходы статуса ---
+    // Контроллер: переходы статуса
 
     @Test
     fun `controller goes Checking then Success`() = runTest {

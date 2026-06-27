@@ -180,7 +180,7 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // --- Split: независимая вторичная сессия внутри вкладки (модель Termius) ---
+    // Split: независимая вторичная сессия внутри вкладки (модель Termius)
 
     private fun SessionsController.connectSplit(parentId: String, hostId: String?) =
         connectSplit(parentId = parentId, hostId = hostId, title = hostId ?: "", subtitle = "u@h:22", target = target, auth = auth)
@@ -320,7 +320,7 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // --- Пустой таб без сессии + per-tab view + connect-reuse ---
+    // Пустой таб без сессии + per-tab view + connect-reuse
 
     @Test
     fun `openBlank adds an active tab with no connection`() = runTest {
@@ -407,7 +407,7 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // --- Drag-reorder вкладок (модель Termius: вкладки можно перетаскивать местами) ---
+    // Drag-reorder вкладок (модель Termius: вкладки можно перетаскивать местами)
 
     @Test
     fun `moveTab reorders tabs and keeps the active one`() = runTest {

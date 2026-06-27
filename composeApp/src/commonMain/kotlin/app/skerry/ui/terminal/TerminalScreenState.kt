@@ -44,14 +44,9 @@ class TerminalScreenState(
     private val session: TerminalSession,
     private val scope: CoroutineScope,
 ) {
-    // respond: ответы терминала (DSR/DA) уходят обратно в PTY — иначе приложения, опрашивающие
-    // курсор/атрибуты, подвисают в ожидании. ВАЖНО: колбэк зовётся синхронно из emulator.feed()
-    // (внутри корутины-владельца), поэтому он обязан лишь писать в PTY (send → session.send) и НЕ
-    // должен прямо/косвенно заводить новый emulator.feed/resize — иначе ломается однопоточный
-    // контракт эмулятора. session.send в PTY-сток, обратно в commands не возвращается.
-    // Запросы OSC 52 на запись в системный буфер. extraBufferCapacity, чтобы tryEmit с владельца-корутины
-    // не терялся при отсутствии подписчика в момент эмита; DROP_OLDEST — при всплеске буфер получает
-    // последнюю запись (last-writer-wins, верная семантика для clipboard), а не застревает на старой.
+    // Запросы OSC 52 на запись в системный буфер. extraBufferCapacity — чтобы tryEmit с
+    // корутины-владельца не терялся без подписчика в момент эмита; DROP_OLDEST при всплеске
+    // оставляет последнюю запись (last-writer-wins, верная семантика буфера), а не старую.
     private val _clipboardCopies = MutableSharedFlow<String>(
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
@@ -61,9 +56,13 @@ class TerminalScreenState(
     val clipboardCopies: SharedFlow<String> = _clipboardCopies
 
     private val emulator = TerminalEmulator(
+        // respond: ответы терминала (DSR/DA) уходят обратно в PTY, иначе приложения, опрашивающие
+        // курсор/атрибуты, подвисают. Колбэк зовётся синхронно из feed() (корутина-владелец), поэтому
+        // обязан лишь писать в PTY (send → session.send) и НЕ заводить новый feed/resize — иначе
+        // ломается однопоточный контракт эмулятора. session.send в PTY-сток, в commands не возвращается.
         respond = { reply -> send(reply) },
-        // OSC 52-запись: эмулятор зовёт это синхронно из feed() на корутине-владельце, поэтому НЕ трогаем
-        // системный буфер здесь — публикуем во flow, а композбл кладёт в буфер на UI-потоке.
+        // OSC 52-запись зовётся так же синхронно из feed() — буфер здесь не трогаем, публикуем во flow,
+        // а композбл кладёт в системный буфер на UI-потоке.
         onClipboardCopy = { text -> _clipboardCopies.tryEmit(text) },
     )
 

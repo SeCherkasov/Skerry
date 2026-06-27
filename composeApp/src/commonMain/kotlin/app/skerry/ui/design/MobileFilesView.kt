@@ -86,7 +86,7 @@ fun MobileFilesScreen() {
     }
 }
 
-// ──────────────────────────────────────── Live ────────────────────────────────────────
+// Живой путь.
 
 /**
  * Живой Files-экран поверх кэшированного [TransferCoordinator] сессии (открывается один раз и живёт
@@ -414,7 +414,7 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
     }
 }
 
-// ──────────────────────────────────────── Shared chrome ────────────────────────────────────────
+// Общий chrome.
 
 /** Заголовок «Files» (28sp, как в макете). Действия (создать каталог/загрузить) — в общем «+»-FAB. */
 @Composable
@@ -512,7 +512,7 @@ private fun ConnectingMobileFilesView(subtitle: String) {
     }
 }
 
-// ──────────────────────────────────────── Mock (preview/офскрин) ────────────────────────────────────────
+// Мок (превью/офскрин).
 
 private data class MockFileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val trailing: String, val selected: Boolean = false)
 

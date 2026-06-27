@@ -43,7 +43,7 @@ class Session(
     var subtitle: String by mutableStateOf(subtitle)
         private set
 
-    /** Выбранная подвью этой вкладки (Terminal/SFTP/Ports), переживает переключение вкладок. */
+    /** Выбранная подвью этой вкладки (Terminal/SFTP), переживает переключение вкладок. */
     var view: SessionView by mutableStateOf(SessionView.Terminal)
         private set
 
@@ -174,7 +174,7 @@ class SessionsController(
         return open(hostId, title, subtitle, target, auth)
     }
 
-    /** Сменить подвью активной вкладки (Terminal/SFTP/Ports); без активной — no-op. */
+    /** Сменить подвью активной вкладки (Terminal/SFTP); без активной — no-op. */
     fun setActiveView(view: SessionView) {
         active?.setView(view)
     }

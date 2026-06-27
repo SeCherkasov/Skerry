@@ -12,7 +12,7 @@ private fun List<Host>.groupsOf() = map { it.group }
 
 class HostReorderingTest {
 
-    // ──────────────────────────── moveHostToGroup: внутри папки ────────────────────────────
+    // moveHostToGroup: внутри папки
 
     @Test
     fun moves_a_host_up_within_its_own_group() {
@@ -41,7 +41,7 @@ class HostReorderingTest {
         assertEquals(listOf("b", "a"), result.map { it.id })
     }
 
-    // ──────────────────────────── moveHostToGroup: между папками ────────────────────────────
+    // moveHostToGroup: между папками
 
     @Test
     fun moves_a_host_into_another_group_and_rewrites_its_group() {
@@ -119,7 +119,7 @@ class HostReorderingTest {
         assertEquals("Lab", after.group)
     }
 
-    // ──────────────────────────── moveGroup ────────────────────────────
+    // moveGroup
 
     @Test
     fun moves_a_whole_group_block_before_another() {
@@ -157,7 +157,7 @@ class HostReorderingTest {
         assertEquals(listOf("a", "loose"), result.map { it.id })
     }
 
-    // ──────────────────────────────── renameHostGroup ────────────────────────────────
+    // renameHostGroup
 
     @Test
     fun renames_group_on_all_its_hosts() {

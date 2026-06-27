@@ -106,7 +106,7 @@ private fun SettingToggleRow(title: String, desc: String, on: Boolean, onToggle:
     }
 }
 
-// ───────────────────────── AI ─────────────────────────
+// AI.
 
 @Composable
 private fun AiSection(state: DesktopDesignState) {
@@ -154,7 +154,7 @@ private fun ProviderCard(icon: String, title: String, desc: String, selected: Bo
     }
 }
 
-// ───────────────────────── Appearance ─────────────────────────
+// Appearance.
 
 @Composable
 private fun AppearanceSection() {
@@ -202,7 +202,7 @@ private fun ThemeCard(name: String, active: Boolean, mono: FontFamily, modifier:
     }
 }
 
-// ───────────────────────── Terminal ─────────────────────────
+// Terminal.
 
 @Composable
 private fun TerminalSection() {
@@ -228,7 +228,7 @@ private fun TerminalSection() {
     )
 }
 
-// ───────────────────────── Account ─────────────────────────
+// Account.
 
 @Composable
 private fun AccountSection() {
@@ -279,7 +279,7 @@ private fun DeviceRow(icon: String, name: String, sub: String, trailing: String?
     }
 }
 
-// ───────────────────────── Sync ─────────────────────────
+// Sync.
 
 @Composable
 private fun SyncSection() {
@@ -303,7 +303,7 @@ private fun SyncSection() {
     SettingToggleRow("Terminal history", "Off by default for privacy.", on = false, onToggle = {})
 }
 
-// ───────────────────────── Security ─────────────────────────
+// Security.
 
 @Composable
 private fun SecuritySection() {
@@ -349,7 +349,7 @@ private fun SecuritySection() {
     }
 }
 
-// ───────────────────────── Keyboard ─────────────────────────
+// Keyboard.
 
 @Composable
 private fun KeyboardSection() {
@@ -375,7 +375,7 @@ private fun KeyboardSection() {
     }
 }
 
-// ───────────────────────── About ─────────────────────────
+// About.
 
 @Composable
 private fun AboutSection() {
@@ -395,7 +395,7 @@ private fun AboutSection() {
     }
 }
 
-// ───────────────────────── helpers ─────────────────────────
+// Хелперы.
 
 @Composable
 private fun SettingValueRow(title: String, desc: String, value: String) {

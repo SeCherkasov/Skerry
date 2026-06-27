@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
  */
 class SkerryColorsTest {
 
-    // --- Поверхности ---
+    // Поверхности
 
     @Test
     fun `surface tokens match prototype root`() {
@@ -21,7 +21,7 @@ class SkerryColorsTest {
         assertEquals(Color(0xFF050E16), SkerryColors.terminalBg)
     }
 
-    // --- Primary: cyan ---
+    // Primary: cyan
 
     @Test
     fun `cyan tokens match prototype root`() {
@@ -38,7 +38,7 @@ class SkerryColorsTest {
         assertEquals(SkerryColors.cyan.copy(alpha = 0.14f), SkerryColors.lineStrong)
     }
 
-    // --- Secondary: amber (только AI/lighthouse-моменты) ---
+    // Secondary: amber (только AI/lighthouse-моменты)
 
     @Test
     fun `amber tokens match prototype root`() {
@@ -47,7 +47,7 @@ class SkerryColorsTest {
         assertEquals(SkerryColors.amber.copy(alpha = 0.14f), SkerryColors.amberSoft)
     }
 
-    // --- Семантические ---
+    // Семантические
 
     @Test
     fun `semantic tokens match prototype root`() {
@@ -56,7 +56,7 @@ class SkerryColorsTest {
         assertEquals(Color(0xFFE94B4B), SkerryColors.storm)
     }
 
-    // --- Текст ---
+    // Текст
 
     @Test
     fun `text tokens match prototype root`() {
@@ -65,7 +65,7 @@ class SkerryColorsTest {
         assertEquals(Color(0xFF5A7080), SkerryColors.textFaint)
     }
 
-    // --- Маппинг в Material ColorScheme ---
+    // Маппинг в Material ColorScheme
 
     @Test
     fun `dark color scheme maps tokens to material roles`() {

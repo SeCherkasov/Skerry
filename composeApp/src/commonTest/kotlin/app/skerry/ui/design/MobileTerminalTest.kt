@@ -28,7 +28,7 @@ class MobileTerminalTest {
         return ConnectionUiState.Connected(TerminalScreenState(session, CoroutineScope(Job())))
     }
 
-    // ── статус-строка шапки ──
+    // Статус-строка шапки
 
     @Test
     fun status_text_reflects_connection_state() {
@@ -39,7 +39,7 @@ class MobileTerminalTest {
         assertEquals("no session", mobileTerminalStatusText(null))
     }
 
-    // ── решение при тапе Connect ──
+    // Решение при тапе Connect
 
     @Test
     fun connect_resumes_live_session_else_opens_fresh() {
@@ -52,7 +52,7 @@ class MobileTerminalTest {
         assertEquals(MobileConnectAction.OpenFresh, mobileConnectAction(null))
     }
 
-    // ── sticky-ctrl на клавишной панели ──
+    // sticky-ctrl на клавишной панели
 
     @Test
     fun control_byte_encodes_ctrl_combos() {
@@ -64,7 +64,7 @@ class MobileTerminalTest {
         assertEquals("\u001b", controlByte('[')) // Ctrl+[ = ESC
     }
 
-    // ── sticky-ctrl поверх ввода с софт-клавиатуры (IME-путь) ──
+    // sticky-ctrl поверх ввода с софт-клавиатуры (IME-путь).
     // ESC и control-байты строим из кодов (27.toChar()/controlByte) — никаких невидимых литералов.
 
     @Test
@@ -80,7 +80,7 @@ class MobileTerminalTest {
         assertEquals("", applyStickyCtrl(armed = true, input = ""))
     }
 
-    // ── стрелки с учётом DECCKM (application-cursor-keys) ──
+    // Стрелки с учётом DECCKM (application-cursor-keys)
 
     @Test
     fun arrows_use_csi_in_normal_mode() {

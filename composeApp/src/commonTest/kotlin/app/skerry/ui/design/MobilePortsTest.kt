@@ -19,7 +19,7 @@ class MobilePortsTest {
     private fun entry(direction: TunnelDirection, status: TunnelStatus = TunnelStatus.Active(8080)): TunnelEntry =
         TunnelEntry(tunnel(direction)).also { it.status = status }
 
-    // ── стрелка между source и dest ──
+    // Стрелка между source и dest
 
     @Test
     fun arrow_is_all_inclusive_for_dynamic_else_forward() {
@@ -28,7 +28,7 @@ class MobilePortsTest {
         assertEquals("all_inclusive", mobileTunnelArrow(TunnelDirection.Dynamic))
     }
 
-    // ── текст назначения: явный адрес или «dynamic proxy» для SOCKS ──
+    // Текст назначения: явный адрес или «dynamic proxy» для SOCKS
 
     @Test
     fun dest_text_shows_address_or_dynamic_proxy() {
@@ -38,7 +38,7 @@ class MobilePortsTest {
         assertEquals("dynamic proxy", mobileTunnelDest(tunnel(TunnelDirection.Dynamic, destHost = null, destPort = null)))
     }
 
-    // ── счётчик активных туннелей для подзаголовка хаба More ──
+    // Счётчик активных туннелей для подзаголовка хаба More
 
     @Test
     fun active_count_counts_only_active() {
@@ -53,7 +53,7 @@ class MobilePortsTest {
         assertEquals(0, mobileActiveTunnelCount(emptyList()))
     }
 
-    // ── подзаголовок строки Port forwarding в More ──
+    // Подзаголовок строки Port forwarding в More
 
     @Test
     fun more_ports_subtitle_blank_without_manager_else_count() {
@@ -64,7 +64,7 @@ class MobilePortsTest {
         assertEquals("3 active", mobileMorePortsSubtitle(3))
     }
 
-    // ── подзаголовок строки Known hosts в More ──
+    // Подзаголовок строки Known hosts в More
 
     @Test
     fun more_known_subtitle_reports_changes_or_verified() {

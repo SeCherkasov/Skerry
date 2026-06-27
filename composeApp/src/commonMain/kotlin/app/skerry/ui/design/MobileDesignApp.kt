@@ -240,7 +240,7 @@ private fun openMobileSession(
     navigateAfterConnect(state, dest)
 }
 
-// ──────────────────────────────── контент (плейсхолдеры слайса 1) ────────────────────────────────
+// Контент: корневые табы и push-экраны.
 
 /**
  * Корневой экран текущего таба. Hosts/Files/Vault/More реализованы 1:1; Snippets — заголовок макета
@@ -303,7 +303,7 @@ private fun MobileRoutePlaceholder(state: MobileDesignState, title: String) {
     }
 }
 
-// ──────────────────────────────── нижний таб-бар ────────────────────────────────
+// Нижний таб-бар.
 
 /**
  * Нижний таб-бар `Skerry Mobile.html` (5 табов): полупрозрачный тёмный фон + верхняя cyan-линия,
@@ -346,7 +346,7 @@ private fun MobileTabItem(tab: MobileTab, active: Boolean, onClick: () -> Unit) 
     }
 }
 
-// ──────────────────────────────── lock-экраны (мобильный визуал) ────────────────────────────────
+// Lock-экраны (мобильный визуал).
 
 /**
  * Живая форма разблокировки `Skerry Mobile.html` (режим master-password): логотип, заголовок,

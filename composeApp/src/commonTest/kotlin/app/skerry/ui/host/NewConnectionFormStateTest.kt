@@ -69,7 +69,7 @@ class NewConnectionFormStateTest {
         assertNull(f.toDraft().credentialId)
     }
 
-    // --- Аутентификация ---
+    // Аутентификация
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
 
@@ -139,7 +139,7 @@ class NewConnectionFormStateTest {
         assertNull(id)
     }
 
-    // --- Правка существующего хоста (fromHost предзаполняет форму) ---
+    // Правка существующего хоста: fromHost предзаполняет форму
 
     @Test
     fun fromHost_prefills_fields_and_round_trips_via_draft() {
@@ -175,7 +175,7 @@ class NewConnectionFormStateTest {
         assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
 
-    // --- Теги --- (канонизация одиночного тега — в app.skerry.shared.host.HostTagsTest)
+    // Теги (канонизация одиночного тега — в app.skerry.shared.host.HostTagsTest)
 
     @Test
     fun addTag_normalizes_dedupes_and_keeps_order() {

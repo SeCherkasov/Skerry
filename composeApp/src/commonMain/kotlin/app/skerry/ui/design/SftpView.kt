@@ -110,7 +110,7 @@ private fun SftpTopBar(subtitle: String, mono: FontFamily) {
     }
 }
 
-// ──────────────────────────────────────── Live ────────────────────────────────────────
+// Живой путь.
 
 /**
  * Живой двухпанельный SFTP поверх кэшированного [TransferCoordinator] сессии. Координатор открывается
@@ -463,7 +463,7 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
     }
 }
 
-// ──────────────────────────────────────── Dialogs ────────────────────────────────────────
+// Диалоги.
 
 /** Модальный ввод имени (New folder / Rename) в дизайн-стиле. Confirm активен только при валидном имени. */
 @Composable
@@ -565,7 +565,7 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
     }
 }
 
-// ──────────────────────────────────────── Shared / Mock ────────────────────────────────────────
+// Общее и мок-путь.
 
 /** Центрированное уведомление в области листинга (открытие/ошибка/нет сессии). */
 @Composable

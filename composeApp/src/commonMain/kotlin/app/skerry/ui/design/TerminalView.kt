@@ -108,7 +108,7 @@ fun TerminalView(state: DesktopDesignState) {
     }
 }
 
-// ──────────────────────────────── hosts sidebar ────────────────────────────────
+// Сайдбар хостов.
 
 @Composable
 private fun HostsSidebar(state: DesktopDesignState) {
@@ -583,7 +583,7 @@ private fun HostMenuItem(label: String, color: Color, onClick: () -> Unit) {
     }
 }
 
-// ──────────────────────────────── session toolbar ────────────────────────────────
+// Тулбар сессии.
 
 @Composable
 private fun SessionToolbar(state: DesktopDesignState) {
@@ -639,7 +639,7 @@ private fun SessionToolbar(state: DesktopDesignState) {
     }
 }
 
-// ──────────────────────────────── terminal pane ────────────────────────────────
+// Терминальная панель.
 
 /**
  * Терминальная область: живая ([LocalSessions] подан, за гейтом vault) или мок-демо макета.
@@ -799,7 +799,7 @@ private fun LogLine(mono: FontFamily, head: String, code: String, tail: String, 
     }
 }
 
-// ──────────────────────────────── AI suggestion card ────────────────────────────────
+// AI-карточка-подсказка.
 
 @Composable
 private fun AiSuggestionCard() {
@@ -866,7 +866,7 @@ private fun AiSuggestionCard() {
     }
 }
 
-// ──────────────────────────────── split pane ────────────────────────────────
+// Split-панель.
 
 /**
  * Живая split-панель (модель Termius): вторая НЕЗАВИСИМАЯ сессия активной вкладки
@@ -1031,7 +1031,7 @@ private fun SplitPane(modifier: Modifier = Modifier) {
     }
 }
 
-// ──────────────────────────────── info panel ────────────────────────────────
+// Info-панель.
 
 @Composable
 private fun InfoPanel() {
@@ -1150,7 +1150,7 @@ private fun liveSystemSummary(m: HostMetrics?): String {
     return if (lines.isEmpty()) "…" else lines.joinToString("\n")
 }
 
-// ──────────────────────────────── AI bar ────────────────────────────────
+// AI-бар.
 
 @Composable
 private fun AiBar() {

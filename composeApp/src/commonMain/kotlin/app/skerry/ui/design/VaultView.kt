@@ -95,9 +95,7 @@ fun VaultView() {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
 // Живой путь: keychain-секреты vault + учётки + генерация/добавление/импорт/удаление.
-// ---------------------------------------------------------------------------------------------
 
 @Composable
 private fun LiveVaultView(credentials: CredentialManagerController) {
@@ -247,9 +245,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
 internal fun Host.unbindCredential(): HostDraft =
     HostDraft(id = id, label = label, address = address, port = port, username = username, group = group, credentialId = null)
 
-// ---------------------------------------------------------------------------------------------
 // Левый sidebar категорий (живые счётчики) + шапка с действием категории.
-// ---------------------------------------------------------------------------------------------
 
 @Composable
 private fun VaultSidebar(
@@ -322,9 +318,7 @@ private fun VaultHeader(
     }
 }
 
-// ---------------------------------------------------------------------------------------------
 // Карточка keychain-секрета (ключ/пароль/сертификат) + карточка учётки + пустые состояния.
-// ---------------------------------------------------------------------------------------------
 
 @Composable
 private fun LiveSecretCard(
@@ -439,9 +433,7 @@ internal fun rememberCertInfo(credential: Credential, inspector: SshCertificateI
     }.value
 }
 
-// ---------------------------------------------------------------------------------------------
 // Панель деталей выбранного keychain-секрета и выбранной учётки.
-// ---------------------------------------------------------------------------------------------
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -561,9 +553,7 @@ internal fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) 
     Txt(info.caFingerprintSha256, color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
 }
 
-// ---------------------------------------------------------------------------------------------
 // Диалоги: генерация ключа, добавление пароля, импорт сертификата, подтверждение удаления.
-// ---------------------------------------------------------------------------------------------
 
 @Composable
 internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
@@ -764,9 +754,7 @@ private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismi
     }
 }
 
-// ---------------------------------------------------------------------------------------------
 // Мок-путь (офскрин-рендер/превью): статичные категории/ключи/детали из макета.
-// ---------------------------------------------------------------------------------------------
 
 /** Vault view (мок): категории секретов (sidebar) + список SSH-ключей + панель деталей ключа. */
 @Composable

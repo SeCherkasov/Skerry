@@ -197,7 +197,7 @@ class FilePaneControllerTest {
         assertIs<FilePaneState.Error>(c.state)
     }
 
-    // ---- мультивыделение ----
+    // Мультивыделение
 
     @Test
     fun `selectOnly selects a single item`() = runTest {

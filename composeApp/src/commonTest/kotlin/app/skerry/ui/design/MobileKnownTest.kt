@@ -22,7 +22,7 @@ class MobileKnownTest {
     private fun mismatch(host: String = "nas-truenas", keyType: String = "ssh-ed25519"): HostKeyMismatch =
         HostKeyMismatch(host, 22, keyType, "SHA256:old", "SHA256:new", "2026-06-22T08:00:00Z")
 
-    // ── подпись строки: тип + короткий отпечаток (verified) / тип + «changed» (сменился) ──
+    // Подпись строки: тип + короткий отпечаток (verified) / тип + «changed» (сменился)
 
     @Test
     fun subtitle_shows_type_and_short_fingerprint_when_verified() {
@@ -37,7 +37,7 @@ class MobileKnownTest {
         assertEquals("ed25519 · changed", mobileKnownSubtitle(entry(status = KnownHostStatus.Changed)))
     }
 
-    // ── иконка статуса строки ──
+    // Иконка статуса строки
 
     @Test
     fun status_icon_verified_or_error() {
@@ -45,7 +45,7 @@ class MobileKnownTest {
         assertEquals("error", mobileKnownStatusIcon(KnownHostStatus.Changed))
     }
 
-    // ── баннер смены ключа ──
+    // Баннер смены ключа
 
     @Test
     fun banner_title_names_the_host() {

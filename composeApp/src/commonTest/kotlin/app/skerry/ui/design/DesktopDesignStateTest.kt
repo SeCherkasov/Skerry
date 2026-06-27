@@ -97,7 +97,7 @@ class DesktopDesignStateTest {
 
     @Test
     fun closeTab_active_picks_right_neighbor_then_clamps() {
-        val s = DesktopDesignState() // 4 вкладок, активна 0
+        val s = DesktopDesignState() // 4 вкладки, активна 0
         s.setTab(3)                  // активна последняя
         s.closeTab(3)                // удалили последнюю — активная зажимается на новую последнюю (2)
         assertEquals(3, s.tabs.size)
@@ -178,7 +178,7 @@ class DesktopDesignStateTest {
         s.closeModal(); assertFalse(s.modalOpen)
     }
 
-    // --- Правка / удаление существующего хоста ---
+    // Правка / удаление существующего хоста
 
     private val sampleHost = Host(id = "h1", label = "box", address = "a", port = 22, username = "u")
 
@@ -211,7 +211,7 @@ class DesktopDesignStateTest {
         assertNull(s.pendingDeleteHost)
     }
 
-    // --- Персист видимости info-панели ---
+    // Персист видимости info-панели
 
     @Test
     fun info_panel_honours_initial_value() {
@@ -229,7 +229,7 @@ class DesktopDesignStateTest {
         assertTrue(s.infoPanel)
     }
 
-    // --- Персист схлопнутых групп хостов ---
+    // Персист схлопнутых групп хостов
 
     @Test
     fun collapsed_groups_default_empty() {
@@ -258,7 +258,7 @@ class DesktopDesignStateTest {
         assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
     }
 
-    // --- Персист недавних подключений (секция RECENT в сайдбаре) ---
+    // Персист недавних подключений (секция RECENT в сайдбаре)
 
     @Test
     fun recent_hosts_default_empty() {
@@ -311,7 +311,7 @@ class DesktopDesignStateTest {
         assertTrue(seen.isEmpty())
     }
 
-    // --- Пользовательские (пустые) группы хостов ---
+    // Пользовательские (пустые) группы хостов
 
     @Test
     fun custom_groups_default_empty() {

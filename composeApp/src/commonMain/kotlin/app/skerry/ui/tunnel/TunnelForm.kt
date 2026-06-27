@@ -6,9 +6,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.shared.vault.Credential
 
-/**
- * Чистые хелперы редактора туннелей — вынесены из Compose, чтобы покрываться тестами без UI.
- */
+// Чистые хелперы редактора туннелей — вынесены из Compose, чтобы покрываться тестами без UI.
 
 private fun parsePort(value: String, min: Int): Int? =
     value.trim().toIntOrNull()?.takeIf { it in min..65535 }

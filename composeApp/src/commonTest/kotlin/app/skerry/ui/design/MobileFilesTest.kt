@@ -11,7 +11,7 @@ class MobileFilesTest {
     private fun item(name: String, type: FileItemType, size: Long = 0): FileItem =
         FileItem(name = name, path = "/var/www/$name", type = type, size = size, modifiedEpochSeconds = 0)
 
-    // ── режим экрана по состоянию сессий ──
+    // Режим экрана по состоянию сессий
 
     @Test
     fun files_mode_picks_preview_when_no_session_manager() {
@@ -40,7 +40,7 @@ class MobileFilesTest {
         assertEquals(MobileFilesMode.NoSession, mobileFilesMode(hasSessions = true, connected = false, connecting = false))
     }
 
-    // ── мета-подпись строки (честная проекция на FileItem) ──
+    // Мета-подпись строки (честная проекция на FileItem)
 
     @Test
     fun row_meta_shows_human_size_for_files_and_empty_for_dirs() {
@@ -50,7 +50,7 @@ class MobileFilesTest {
         assertEquals("", mobileFileRowMeta(item("html", FileItemType.Directory)))
     }
 
-    // ── ведущая иконка строки ──
+    // Ведущая иконка строки
 
     @Test
     fun leading_icon_maps_by_type_and_script_extension() {
@@ -61,7 +61,7 @@ class MobileFilesTest {
         assertEquals("terminal", mobileFileIcon(item("deploy.sh", FileItemType.File)))
     }
 
-    // ── завершающая иконка строки (видимое действие макета) ──
+    // Завершающая иконка строки (видимое действие макета)
 
     @Test
     fun trailing_icon_is_chevron_for_dirs_and_share_for_files() {
@@ -70,7 +70,7 @@ class MobileFilesTest {
         assertEquals("ios_share", mobileFileTrailingIcon(FileItemType.Symlink))
     }
 
-    // ── строка пути (крошка под переключателем) ──
+    // Строка пути (крошка под переключателем)
 
     @Test
     fun breadcrumb_joins_label_and_path() {

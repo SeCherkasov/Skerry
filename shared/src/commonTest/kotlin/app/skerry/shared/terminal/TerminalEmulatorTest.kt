@@ -21,7 +21,7 @@ class TerminalEmulatorTest {
     private fun TerminalEmulator.asText(): String =
         lines.joinToString("\n") { row -> row.joinToString("") { it.text }.trimEnd() }.trimEnd('\n')
 
-    // --- Базовая печать ----------------------------------------------------
+    // Базовая печать
 
     @Test
     fun `plain text fills one line`() {
@@ -60,7 +60,7 @@ class TerminalEmulatorTest {
         assertEquals("a       b", emulate(chunks = arrayOf("a\tb")).asText())
     }
 
-    // --- Автоперенос (DECAWM) ----------------------------------------------
+    // Автоперенос (DECAWM)
 
     @Test
     fun `printing past the last column wraps to the next line`() {
@@ -73,7 +73,7 @@ class TerminalEmulatorTest {
         assertEquals("abd", emulate(cols = 3, rows = 4, chunks = arrayOf("$esc[?7l", "abcd")).asText())
     }
 
-    // --- SGR ---------------------------------------------------------------
+    // SGR
 
     @Test
     fun `sgr sets foreground color until reset`() {
@@ -116,7 +116,7 @@ class TerminalEmulatorTest {
         assertTrue(s.italic && s.underline && s.inverse && s.strikethrough)
     }
 
-    // --- Modern SGR: стили и цвет подчёркивания (4:x, 21, 58, 59) ----------
+    // Modern SGR: стили и цвет подчёркивания (4:x, 21, 58, 59)
 
     @Test
     fun `plain sgr 4 is a single underline`() {
@@ -185,7 +185,7 @@ class TerminalEmulatorTest {
         assertEquals(TermColor.BrightRed, s.underlineColor)
     }
 
-    // --- OSC 8 гиперссылки --------------------------------------------------
+    // OSC 8 гиперссылки
 
     @Test
     fun `osc 8 attaches a hyperlink to printed cells`() {
@@ -229,7 +229,7 @@ class TerminalEmulatorTest {
         assertEquals(null, emu.lines[0][0].hyperlink)
     }
 
-    // --- OSC 52 буфер обмена -----------------------------------------------
+    // OSC 52 буфер обмена
 
     @Test
     fun `osc 52 write decodes base64 and reports a clipboard copy`() {
@@ -293,7 +293,7 @@ class TerminalEmulatorTest {
         assertEquals(listOf("aaa".repeat(1000)), copied)
     }
 
-    // --- OSC 4/104 динамическая палитра ------------------------------------
+    // OSC 4/104 динамическая палитра
 
     @Test
     fun `osc 4 overrides a palette color with rgb spec`() {
@@ -354,7 +354,7 @@ class TerminalEmulatorTest {
         assertEquals(null, emu.paletteOverride(1))
     }
 
-    // --- Адресация курсора -------------------------------------------------
+    // Адресация курсора
 
     @Test
     fun `cup positions cursor absolutely`() {
@@ -389,7 +389,7 @@ class TerminalEmulatorTest {
         assertEquals("\n\nX", emulate(chunks = arrayOf("$esc[3dX")).asText())
     }
 
-    // --- REP (повтор предыдущего символа) ----------------------------------
+    // REP (повтор предыдущего символа)
 
     @Test
     fun `rep repeats the preceding character`() {
@@ -410,7 +410,7 @@ class TerminalEmulatorTest {
         assertTrue(emu.lines[0][5].style.inverse, "повторённые пробелы тоже инверсны")
     }
 
-    // --- Стирание ----------------------------------------------------------
+    // Стирание
 
     @Test
     fun `erase to end of line clears from cursor`() {
@@ -448,7 +448,7 @@ class TerminalEmulatorTest {
         assertEquals(2, emu.lines.size)
     }
 
-    // --- Вставка / удаление ------------------------------------------------
+    // Вставка / удаление
 
     @Test
     fun `insert chars shifts the rest right`() {
@@ -475,7 +475,7 @@ class TerminalEmulatorTest {
         assertEquals("A\nC\nD", emulate(cols = 4, rows = 4, chunks = arrayOf("A\r\nB\r\nC\r\nD", "$esc[2;1H", "$esc[M")).asText())
     }
 
-    // --- Прокрутка / регион ------------------------------------------------
+    // Прокрутка / регион
 
     @Test
     fun `scrolling off the top feeds scrollback`() {
@@ -516,7 +516,7 @@ class TerminalEmulatorTest {
         assertEquals("a        b", emulate(cols = 10, rows = 2, chunks = arrayOf("a", "$esc[3g", "\t", "b")).asText())
     }
 
-    // --- Курсор save/restore ----------------------------------------------
+    // Курсор save/restore
 
     @Test
     fun `save and restore cursor with esc 7 and esc 8`() {
@@ -524,7 +524,7 @@ class TerminalEmulatorTest {
         assertEquals("ABX\n\nCD", emulate(chunks = arrayOf("AB", "${esc}7", "\r\n\r\nCD", "${esc}8", "X")).asText())
     }
 
-    // --- Alt-screen --------------------------------------------------------
+    // Alt-screen
 
     @Test
     fun `alt screen hides primary and restores it on exit`() {
@@ -539,7 +539,7 @@ class TerminalEmulatorTest {
         assertEquals("main", emu.asText())
     }
 
-    // --- Ответы DSR/DA -----------------------------------------------------
+    // Ответы DSR/DA
 
     @Test
     fun `device status report returns cursor position`() {
@@ -597,7 +597,7 @@ class TerminalEmulatorTest {
         assertEquals("${esc}P>|Skerry(0.1)$esc\\", replies.single())
     }
 
-    // --- OSC / bell --------------------------------------------------------
+    // OSC / bell
 
     @Test
     fun `osc sets the window title`() {
@@ -659,7 +659,7 @@ class TerminalEmulatorTest {
         assertEquals("", emu.title)
     }
 
-    // --- Комбинируемые знаки (grapheme-кластеры) ------------------------------------------
+    // Комбинируемые знаки (grapheme-кластеры)
 
     private val acute = "́" // combining acute accent (нулевая ширина)
     private val zwj = "‍"   // zero-width joiner
@@ -700,7 +700,7 @@ class TerminalEmulatorTest {
         assertEquals("X", emu.lines[0][1].text)
     }
 
-    // --- Строковые последовательности: DCS / APC / PM / SOS + XTGETTCAP --------------------
+    // Строковые последовательности: DCS / APC / PM / SOS + XTGETTCAP
 
     @Test
     fun `DCS body is swallowed and does not leak to the screen`() {
@@ -755,7 +755,7 @@ class TerminalEmulatorTest {
         assertTrue(rang)
     }
 
-    // --- Приватные режимы --------------------------------------------------
+    // Приватные режимы
 
     @Test
     fun `application cursor keys mode off by default`() {
@@ -889,7 +889,7 @@ class TerminalEmulatorTest {
         assertFalse(emulate(chunks = arrayOf("$esc[?1049h$esc[?2004h")).applicationCursorKeys)
     }
 
-    // --- Resize ------------------------------------------------------------
+    // Resize
 
     @Test
     fun `resize changes dimensions and preserves visible text`() {
@@ -964,7 +964,7 @@ class TerminalEmulatorTest {
         assertEquals(6, emu.cursorCol)
     }
 
-    // --- Курсор: абсолютные индексы ----------------------------------------
+    // Курсор: абсолютные индексы
 
     @Test
     fun `cursor row is absolute including scrollback`() {
@@ -974,7 +974,7 @@ class TerminalEmulatorTest {
         assertEquals(1, emu.cursorCol)
     }
 
-    // --- UTF-8 -------------------------------------------------------------
+    // UTF-8
 
     @Test
     fun `utf8 multibyte split across feeds decodes to one cell`() {
@@ -985,7 +985,7 @@ class TerminalEmulatorTest {
         assertEquals("П", emu.lines[0][0].text)
     }
 
-    // --- DEC line-drawing charset (DEC Special Graphics) -------------------
+    // DEC line-drawing charset (DEC Special Graphics)
 
     @Test
     fun `ESC paren 0 maps ascii qxlk to box-drawing glyphs`() {
@@ -1031,7 +1031,7 @@ class TerminalEmulatorTest {
         assertEquals("q", emu.asText())
     }
 
-    // --- Unicode-ширина (CJK/emoji двойной ширины + астральные) ------------
+    // Unicode-ширина (CJK/emoji двойной ширины + астральные)
 
     @Test
     fun `cjk char occupies two cells and advances cursor by two`() {

@@ -47,7 +47,10 @@ class ForwardEntry internal constructor(
     var status: ForwardStatus by mutableStateOf(ForwardStatus.Starting)
         internal set
 
-    /** На паузе ли проброс (тумблер ACTIVE снят, но порт держится). Меняется через [PortForwardController.pause]/[resume]. */
+    /**
+     * На паузе ли проброс (тумблер ACTIVE снят, но порт держится). Меняется через
+     * [PortForwardController.pause]/[resume].
+     */
     var paused: Boolean by mutableStateOf(false)
         internal set
 

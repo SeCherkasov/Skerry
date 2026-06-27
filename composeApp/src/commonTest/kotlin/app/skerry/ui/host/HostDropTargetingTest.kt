@@ -6,7 +6,7 @@ import kotlin.test.assertNull
 
 class HostDropTargetingTest {
 
-    // ──────────────────────────── hostDropTarget ────────────────────────────
+    // hostDropTarget
 
     private val prod = FolderBounds(group = "Prod", top = 0f, bottom = 60f, otherHostCentersY = listOf(10f, 30f, 50f))
     private val lab = FolderBounds(group = "Lab", top = 60f, bottom = 100f, otherHostCentersY = listOf(70f, 90f))
@@ -55,7 +55,7 @@ class HostDropTargetingTest {
         assertEquals(HostDrop("Solo", 0), hostDropTarget(listOf(empty), pointerY = 20f))
     }
 
-    // ──────────────────────────── folderDropTarget ────────────────────────────
+    // folderDropTarget
 
     @Test
     fun folder_drop_counts_headers_above_the_pointer() {

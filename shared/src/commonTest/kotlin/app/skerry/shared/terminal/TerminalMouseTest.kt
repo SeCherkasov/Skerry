@@ -32,14 +32,14 @@ class TerminalMouseTest {
         ctrl: Boolean = false,
     ) = encodeMouseReport(tracking, sgr, button, type, col, row, shift, alt, ctrl)
 
-    // --- Режим Off ---------------------------------------------------------
+    // Режим Off
 
     @Test
     fun `off reports nothing`() {
         assertNull(encode(MouseTracking.Off, sgr = true, button = MouseButton.Left, type = MouseEventType.Press))
     }
 
-    // --- SGR (1006) --------------------------------------------------------
+    // SGR (1006)
 
     @Test
     fun `sgr left press at origin`() {
@@ -84,7 +84,7 @@ class TerminalMouseTest {
         assertEquals("ESC[<28;1;1M", out!!.show())
     }
 
-    // --- SGR-Pixels (1016) -------------------------------------------------
+    // SGR-Pixels (1016)
 
     @Test
     fun `pixel mode encodes pixel coordinates not cells`() {
@@ -125,7 +125,7 @@ class TerminalMouseTest {
         ))
     }
 
-    // --- Legacy (X11 1000) -------------------------------------------------
+    // Legacy (X11 1000)
 
     @Test
     fun `legacy left press encodes three offset bytes`() {
@@ -155,7 +155,7 @@ class TerminalMouseTest {
         assertEquals("ESC[M <255>!", out!!.show())
     }
 
-    // --- Гейтинг по режимам ------------------------------------------------
+    // Гейтинг по режимам
 
     @Test
     fun `x10 reports only button press, no release drag wheel`() {
@@ -191,7 +191,7 @@ class TerminalMouseTest {
         assertEquals("ESC[<35;1;1M", out!!.show())
     }
 
-    // --- Bracketed paste ---------------------------------------------------
+    // Bracketed paste
 
     @Test
     fun `bracketed paste wraps text in markers`() {
@@ -243,7 +243,7 @@ class TerminalMouseTest {
         assertEquals("ESC[200~a<13>b<9>cESC[201~", bracketedPasteWrap(input, bracketed = true).show())
     }
 
-    // --- Гейтинг X10 в SGR-кодировке --------------------------------------
+    // Гейтинг X10 в SGR-кодировке
 
     @Test
     fun `x10 drops non-press events even in sgr encoding`() {

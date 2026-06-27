@@ -121,7 +121,7 @@ private fun MobilePortsHeader(onBack: () -> Unit) {
     }
 }
 
-// ──────────────────────────────────────── Live ────────────────────────────────────────
+// Живой путь.
 
 @Composable
 private fun LiveMobilePortsBody(
@@ -265,7 +265,7 @@ private fun MobileEmptyTunnels() {
     }
 }
 
-// ──────────────────────────────────────── Tunnel editor (лист) ────────────────────────────────────────
+// Tunnel editor (лист).
 
 /**
  * Нижний лист создания/правки туннеля в идиоме листа New connection (sheet): имя, тип, via-host (пикер
@@ -518,7 +518,7 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
     }
 }
 
-// ──────────────────────────────────────── New tunnel button ────────────────────────────────────────
+// New tunnel button.
 
 /** Дашед-кнопка «New tunnel» макета (cyan-рамка, иконка add). */
 @Composable
@@ -556,7 +556,7 @@ private fun tunnelBadgeColors(direction: TunnelDirection): Pair<Color, Color> = 
     TunnelDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
 }
 
-// ──────────────────────────────────────── Mock (preview/офскрин) ────────────────────────────────────────
+// Мок (превью/офскрин).
 
 private data class MockTunnel(val type: String, val bg: Color, val fg: Color, val via: String, val source: String, val arrow: String, val dest: String, val destDim: Boolean, val on: Boolean)
 
