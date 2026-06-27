@@ -66,6 +66,15 @@ class FilePaneController(
     /** Доступна ли строка «..» (мы не в корне) — она открывает пространство навигации сверху. */
     val hasParent: Boolean get() = path != "/"
 
+    /** Показывать ли скрытые объекты (имена с `.` в начале), как в mc. По умолчанию да.
+     *  Только чтение наружу; менять — через [setShowHidden] (имя `var` дало бы клеш сеттеров). */
+    private var hiddenShown: Boolean by mutableStateOf(true)
+    val showHidden: Boolean get() = hiddenShown
+
+    /** Полный отсортированный листинг текущего каталога ДО фильтра видимости — чтобы переключать
+     *  [showHidden] без повторного запроса к источнику. */
+    private var rawEntries: List<FileItem> = emptyList()
+
     /** Якорь Shift-диапазона — путь последней одиночно выбранной/тогглнутой строки. Snapshot-стейт,
      *  чтобы чтение в [selectTo] было согласовано с записью [selection] в той же транзакции. */
     private var anchor: String? by mutableStateOf(null)
@@ -172,8 +181,41 @@ class FilePaneController(
         selection = entries.slice(range).mapTo(mutableSetOf()) { it.path }
     }
 
+    /**
+     * Rubber-band (mc-выделение зажатой ПКМ): пометить/снять диапазон строк от [anchor] до [current]
+     * по текущему порядку отображения. [select] фиксирует знак на всю протяжку (UI определяет его по
+     * строке под нажатием: не помечена → красим, помечена → стираем) — так протаскивание красит в одну
+     * сторону, как в mc. В отличие от [selectTo] (диапазон ЗАМЕНЯЕТ выделение) — добавляет/убавляет
+     * поверх уже помеченного. Якорь Shift-диапазона переносится на [anchor] (точку нажатия), чтобы
+     * последующий Shift-клик продолжал от неё. Вне [FilePaneState.Loaded] / если конец исчез — no-op.
+     */
+    fun rubberBandTo(anchor: FileItem, current: FileItem, select: Boolean) {
+        val entries = (state as? FilePaneState.Loaded)?.entries ?: return
+        val from = entries.indexOfFirst { it.path == anchor.path }
+        val to = entries.indexOfFirst { it.path == current.path }
+        if (from < 0 || to < 0) return
+        val range = if (from <= to) from..to else to..from
+        val touched = entries.slice(range).mapTo(mutableSetOf()) { it.path }
+        selection = if (select) selection + touched else selection - touched
+        this.anchor = anchor.path
+    }
+
     /** Снять всё выделение. */
     fun clearSelection() = resetSelection()
+
+    /**
+     * Переключить показ скрытых объектов (dotfiles) без обращения к источнику — перефильтровываем
+     * кэш [rawEntries]. Объекты, ушедшие из вида, вычищаются из выделения и из-под курсора.
+     */
+    fun setShowHidden(value: Boolean) {
+        if (hiddenShown == value) return
+        hiddenShown = value
+        if (state is FilePaneState.Loaded) {
+            state = FilePaneState.Loaded(visible(rawEntries))
+            pruneSelection()
+            clampCursor()
+        }
+    }
 
     /** Сдвинуть курсор на [delta] строк (с зажимом по краям). Пространство навигации включает «..». */
     fun moveCursor(delta: Int) {
@@ -312,13 +354,23 @@ class FilePaneController(
         if (cursor == null || entries.none { it.path == cursor }) cursor = entries.first().path
     }
 
-    /** Загрузить и отсортировать листинг [target] в [FilePaneState] (без записи в поля стора). */
+    /**
+     * Загрузить и отсортировать листинг [target] в [FilePaneState]. Полный листинг кэшируется в
+     * [rawEntries] (для переключения [showHidden] без повторного запроса), наружу отдаётся
+     * отфильтрованный по видимости. path/курсор/выделение не трогаем — это делают вызывающие.
+     */
     private suspend fun loadState(target: String): FilePaneState =
         try {
-            FilePaneState.Loaded(browser.list(target).sortedForPane())
+            val raw = browser.list(target).sortedForPane()
+            rawEntries = raw
+            FilePaneState.Loaded(visible(raw))
         } catch (e: FileBrowserException) {
             FilePaneState.Error(e.message ?: "Ошибка файловой панели")
         }
+
+    /** Листинг с учётом [showHidden]: скрытые — те, чьё имя начинается с точки (POSIX-конвенция). */
+    private fun visible(entries: List<FileItem>): List<FileItem> =
+        if (showHidden) entries else entries.filterNot { it.name.startsWith(".") }
 
     /** Убрать из выделения/якоря пути, которых больше нет в текущем листинге (удалённые, перемещённые). */
     private fun pruneSelection() {

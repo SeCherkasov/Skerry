@@ -487,4 +487,96 @@ class FilePaneControllerTest {
         advanceUntilIdle()
         assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
     }
+
+    // Rubber-band (mc-выделение зажатой ПКМ): протяжка красит диапазон в один знак.
+
+    @Test
+    fun `rubberBandTo with select paints the range from anchor to current`() = runTest {
+        val c = started()
+        // порядок: alpha(0), zeta(1), build.log(2), readme.txt(3)
+        c.rubberBandTo(c.entry("alpha"), c.entry("build.log"), select = true)
+        assertEquals(setOf("$HOME/alpha", "$HOME/zeta", "$HOME/build.log"), c.selection)
+    }
+
+    @Test
+    fun `rubberBandTo paints the range regardless of drag direction`() = runTest {
+        val c = started()
+        c.rubberBandTo(c.entry("readme.txt"), c.entry("zeta"), select = true)
+        assertEquals(setOf("$HOME/zeta", "$HOME/build.log", "$HOME/readme.txt"), c.selection)
+    }
+
+    @Test
+    fun `rubberBandTo with select accumulates onto an existing selection`() = runTest {
+        // В отличие от selectTo (диапазон ЗАМЕНЯЕТ), rubber-band красит поверх уже помеченного.
+        val c = started()
+        c.selectOnly(c.entry("readme.txt"))
+        c.rubberBandTo(c.entry("alpha"), c.entry("zeta"), select = true)
+        assertEquals(setOf("$HOME/alpha", "$HOME/zeta", "$HOME/readme.txt"), c.selection)
+    }
+
+    @Test
+    fun `rubberBandTo without select erases the range and keeps the rest`() = runTest {
+        val c = started()
+        c.rubberBandTo(c.entry("alpha"), c.entry("readme.txt"), select = true) // всё помечено
+        c.rubberBandTo(c.entry("zeta"), c.entry("build.log"), select = false)
+        assertEquals(setOf("$HOME/alpha", "$HOME/readme.txt"), c.selection)
+    }
+
+    @Test
+    fun `rubberBandTo on a single row toggles that one row by the chosen sign`() = runTest {
+        val c = started()
+        c.rubberBandTo(c.entry("zeta"), c.entry("zeta"), select = true)
+        assertEquals(setOf("$HOME/zeta"), c.selection)
+    }
+
+    // Скрытие скрытых файлов/каталогов (dotfiles), как в mc.
+
+    @Test
+    fun `setShowHidden false hides dotfiles and true brings them back`() = runTest {
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedDir("$HOME/.config")
+            seedDir("$HOME/visible")
+            seedFile("$HOME/.bashrc")
+            seedFile("$HOME/notes.txt")
+        }
+        val c = started(SftpFileBrowser(fake, label = "h"))
+        c.setShowHidden(false)
+        assertEquals(listOf("visible", "notes.txt"), c.loaded().entries.map { it.name })
+        c.setShowHidden(true)
+        assertEquals(listOf(".config", "visible", ".bashrc", "notes.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `hiding moves the cursor off a now-hidden entry`() = runTest {
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedDir("$HOME/visible")
+            seedFile("$HOME/.secret")
+        }
+        val c = started(SftpFileBrowser(fake, label = "h"))
+        c.setCursor(c.entry(".secret"))
+        c.setShowHidden(false)
+        assertEquals("$HOME/visible", c.cursor)
+    }
+
+    @Test
+    fun `hiding drops hidden entries from the selection`() = runTest {
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedFile("$HOME/.secret")
+            seedFile("$HOME/keep.txt")
+        }
+        val c = started(SftpFileBrowser(fake, label = "h"))
+        c.selectOnly(c.entry(".secret"))
+        c.toggle(c.entry("keep.txt"))
+        c.setShowHidden(false)
+        assertEquals(setOf("$HOME/keep.txt"), c.selection)
+    }
+
+    @Test
+    fun `rubberBandTo is a no-op when an endpoint is not in the listing`() = runTest {
+        val c = started()
+        c.selectOnly(c.entry("alpha"))
+        val ghost = FileItem(name = "ghost", path = "$HOME/ghost", type = FileItemType.File, size = 0, modifiedEpochSeconds = 0)
+        c.rubberBandTo(c.entry("zeta"), ghost, select = true)
+        assertEquals(setOf("$HOME/alpha"), c.selection)
+    }
 }
