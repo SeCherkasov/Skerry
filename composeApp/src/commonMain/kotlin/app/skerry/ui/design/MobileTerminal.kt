@@ -1,6 +1,7 @@
 package app.skerry.ui.design
 
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.forward.humanRate
 
 /**
  * Чистая логика мобильного терминал-экрана (`Skerry Mobile.html`, push-экран Terminal) — отделена
@@ -10,8 +11,8 @@ import app.skerry.ui.connection.ConnectionUiState
 
 /**
  * Текст статус-строки под именем хоста в шапке терминала по состоянию соединения активной сессии.
- * Цвет берётся отдельно через [sessionDotColor]. В макете строка «connected · 42ms» — суффикс
- * с пингом опущен (живой телеметрии RTT пока нет, как и в desktop-статусбаре).
+ * Цвет берётся отдельно через [sessionDotColor]. Живые метрики (RTT/throughput) рендерятся рядом
+ * отдельными элементами ([mobileRttLabel]/[mobileRateLabel]), а не в этой строке.
  */
 fun mobileTerminalStatusText(state: ConnectionUiState?): String = when (state) {
     is ConnectionUiState.Connected -> "connected"
@@ -20,6 +21,18 @@ fun mobileTerminalStatusText(state: ConnectionUiState?): String = when (state) {
     is ConnectionUiState.Disconnected -> "disconnected"
     else -> "no session"
 }
+
+/**
+ * Метка RTT-пинга для метрик шапки терминала: `N ms`, либо «—» до первого замера / при сбое
+ * (см. [app.skerry.ui.connection.PingController.rttMs]). Паритет с desktop-статусбаром.
+ */
+fun mobileRttLabel(rttMs: Long?): String = rttMs?.let { "$it ms" } ?: "—"
+
+/**
+ * Метка throughput (↑/↓) для метрик шапки терминала: человекочитаемая скорость ([humanRate]),
+ * либо «—», пока не снят первый отсчёт. Паритет с desktop-статусбаром.
+ */
+fun mobileRateLabel(bytesPerSec: Long?): String = bytesPerSec?.let { humanRate(it) } ?: "—"
 
 /** Что делать при тапе Connect, когда у хоста уже есть открытая сессия. */
 enum class MobileConnectAction {
