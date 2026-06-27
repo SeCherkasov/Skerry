@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -182,6 +183,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
                     onDraftChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
                     onCommit = { form.addTag(tagDraft); tagDraft = "" },
+                    // Подсказки — теги других хостов, ещё не добавленные сюда (паритет desktop Tags); в превью пусто.
+                    allHosts = hosts?.hosts ?: emptyList(),
+                    onPick = { tag -> form.addTag(tag); tagDraft = "" },
                 )
             }
 
@@ -281,6 +285,9 @@ private fun SheetInput(
 /**
  * Редактор тегов в стиле листа (паритет desktop-блока Tags): пилюли `#tag` с крестиком + инлайн-ввод
  * нового тега (Enter/запятая фиксирует пилюлю). [tags] — каноническая форма, на экране с префиксом `#`.
+ * При фокусе поля под ним раскрывается type-ahead-список [tagSuggestions] (теги других [allHosts], ещё
+ * не добавленные сюда, сужённые черновиком); тап по подсказке вызывает [onPick]. Меню через
+ * [AnchoredDropdown] с `focusable = false`, чтобы не отнимать фокус и не прерывать набор.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -290,48 +297,85 @@ private fun SheetTags(
     draft: String,
     onDraftChange: (String) -> Unit,
     onCommit: () -> Unit,
+    allHosts: List<Host>,
+    onPick: (String) -> Unit,
 ) {
     val fonts = LocalFonts.current
     val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 14.sp, fontFamily = fonts.ui) }
-    FlowRow(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        tags.forEach { tag ->
-            key(tag) {
-                Row(
-                    Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 10.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Txt("#$tag", color = D.cyanBright, size = 12.5.sp)
-                    Box(
-                        Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onRemove(tag) }.padding(2.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Sym("close", size = 14.sp, color = D.cyanBright)
+    var focused by remember { mutableStateOf(false) }
+    val suggestions = remember(allHosts, tags, draft) { tagSuggestions(allHosts, tags, draft) }
+    AnchoredDropdown(
+        expanded = focused && suggestions.isNotEmpty(),
+        onDismiss = { focused = false },
+        focusable = false, // не красть фокус у поля ввода тега
+        trigger = {
+            FlowRow(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                tags.forEach { tag ->
+                    key(tag) {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 10.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Txt("#$tag", color = D.cyanBright, size = 12.5.sp)
+                            Box(
+                                Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onRemove(tag) }.padding(2.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Sym("close", size = 14.sp, color = D.cyanBright)
+                            }
+                        }
+                    }
+                }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    singleLine = true,
+                    textStyle = textStyle,
+                    cursorBrush = SolidColor(D.cyan),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { onCommit() }),
+                    modifier = Modifier.widthIn(min = 90.dp).onFocusChanged { focused = it.isFocused },
+                    decorationBox = { inner ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 14.sp)
+                            inner()
+                        }
+                    },
+                )
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier
+                    .width(width)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(SheetPanel)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 4.dp),
+            ) {
+                // Тап добавляет тег; фокус остаётся на поле — меню пересчитается без только что добавленного.
+                suggestions.forEach { tag ->
+                    key(tag) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(tag) }
+                                .padding(horizontal = 14.dp, vertical = 11.dp),
+                        ) {
+                            Txt("#$tag", color = D.cyanBright, size = 14.sp)
+                        }
                     }
                 }
             }
-        }
-        BasicTextField(
-            value = draft,
-            onValueChange = onDraftChange,
-            singleLine = true,
-            textStyle = textStyle,
-            cursorBrush = SolidColor(D.cyan),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onCommit() }),
-            modifier = Modifier.widthIn(min = 90.dp),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 14.sp)
-                    inner()
-                }
-            },
-        )
-    }
+        },
+    )
 }
 
 /**
