@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import app.skerry.shared.host.Host
+import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
@@ -91,6 +93,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         MobileTerminalHeader(
             title = active?.displayTitle ?: "Terminal",
             status = active?.controller?.uiState,
+            controller = active?.controller,
             onBack = state::pop,
             onDisconnect = onDisconnect,
         )
@@ -119,19 +122,32 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 }
 
 /**
- * Шапка терминала по моку (`#0B1A26` + нижняя cyan-линия): back-шеврон, имя хоста + статус-строка,
- * иконка `more_horiz` (меню с Disconnect). [onDisconnect]==null — нет активной сессии, пункт
- * Disconnect скрыт. Split-иконка макета на телефоне убрана (split не нужен).
+ * Шапка терминала по моку (`#0B1A26` + нижняя cyan-линия): back-шеврон, имя хоста + статус-строка с
+ * живыми метриками (RTT/throughput), иконка `more_horiz` (меню с Disconnect). [onDisconnect]==null —
+ * нет активной сессии, пункт Disconnect скрыт. Split-иконка макета на телефоне убрана (split не нужен).
+ *
+ * Метрики берутся из [controller] теми же поллерами, что desktop-статусбар: RTT-пинг ([openPing]) и
+ * скорость канала ([openThroughput]). remember безусловный — ключи (controller + флаг connected)
+ * пересоздают его при смене сессии/подключения; оба метода идемпотентны (кэш в контроллере). До
+ * первого замера/вне коннекта метрика — «—»; узкая строка уезжает за край горизонтальным скроллом.
  */
 @Composable
 private fun MobileTerminalHeader(
     title: String,
     status: ConnectionUiState?,
+    controller: ConnectionController?,
     onBack: () -> Unit,
     onDisconnect: (() -> Unit)?,
 ) {
     val mono = LocalFonts.current.mono
     var menuOpen by remember { mutableStateOf(false) }
+    val connected = status is ConnectionUiState.Connected
+    val throughput = remember(controller, connected) {
+        if (connected && controller != null) controller.openThroughput() else null
+    }
+    val ping = remember(controller, connected) {
+        if (connected && controller != null) controller.openPing() else null
+    }
     Column(Modifier.fillMaxWidth().background(D.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
@@ -151,11 +167,23 @@ private fun MobileTerminalHeader(
             Column(Modifier.weight(1f)) {
                 Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold, font = mono)
                 Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Dot(sessionDotColor(status))
-                    Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Dot(sessionDotColor(status))
+                        Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
+                    }
+                    // Живые метрики активной сессии (паритет desktop-статусбара) — только в коннекте.
+                    if (connected) {
+                        MobileTerminalMetric("network_ping", mobileRttLabel(ping?.rttMs), mono)
+                        MobileTerminalMetric("arrow_upward", mobileRateLabel(throughput?.upRate), mono)
+                        MobileTerminalMetric("arrow_downward", mobileRateLabel(throughput?.downRate), mono)
+                    }
                 }
             }
             Box {
@@ -195,6 +223,15 @@ private fun MobileTerminalHeader(
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan08))
+    }
+}
+
+/** Одна метрика статус-строки шапки: иконка + моноширинное значение (RTT/throughput). */
+@Composable
+private fun MobileTerminalMetric(icon: String, text: String, mono: FontFamily) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Sym(icon, size = 11.sp, color = D.faint)
+        Txt(text, color = D.faint, size = 10.5.sp, font = mono)
     }
 }
 

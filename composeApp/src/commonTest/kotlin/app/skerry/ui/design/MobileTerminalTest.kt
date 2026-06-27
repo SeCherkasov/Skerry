@@ -39,6 +39,23 @@ class MobileTerminalTest {
         assertEquals("no session", mobileTerminalStatusText(null))
     }
 
+    // Метрики статус-бара шапки (RTT/throughput) — паритет с desktop-статусбаром.
+
+    @Test
+    fun rtt_label_formats_ms_or_dash_before_first_ping() {
+        assertEquals("42 ms", mobileRttLabel(42))
+        assertEquals("0 ms", mobileRttLabel(0))
+        assertEquals("—", mobileRttLabel(null)) // до первого замера/при сбое пинга
+    }
+
+    @Test
+    fun rate_label_humanizes_or_dash_before_first_sample() {
+        // Та же гуманизация, что в desktop-статусбаре (humanRate), «—» пока нет замера.
+        assertEquals("0 B/s", mobileRateLabel(0))
+        assertEquals("1 KB/s", mobileRateLabel(1024))
+        assertEquals("—", mobileRateLabel(null))
+    }
+
     // Решение при тапе Connect
 
     @Test
