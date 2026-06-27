@@ -7,13 +7,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -209,7 +210,12 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 mono = mono,
                 onCopy = { clipboard.setText(AnnotatedString(it)) },
                 onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
-                onDelete = { pendingDelete = credential },
+                // Закрываем лист деталей перед показом диалога подтверждения: иначе шторка (рисуется
+                // поверх) перекрыла бы центрированный DeleteSecretDialog, и виден был лишь его край.
+                onDelete = {
+                    selectedId = null
+                    pendingDelete = credential
+                },
                 onDismiss = { selectedId = null },
             )
         }
@@ -387,13 +393,16 @@ private fun MobileSecretDetailSheet(
         is CredentialSecret.Password -> "Password"
     }
     // Скрим на весь экран; тап мимо листа закрывает. Сам лист гасит клик, чтобы не закрываться.
-    Box(
+    // Лист подгоняется под содержимое (короткий пароль ⇒ невысокая шторка), но не выше 85% экрана —
+    // тогда контент скроллится. Фиксированная высота раздувала бы пустую шторку для секрета без тела.
+    BoxWithConstraints(
         Modifier.fillMaxSize().background(Color(0xB3060E16))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        val maxSheetHeight = maxHeight * 0.85f
         Column(
-            Modifier.fillMaxWidth().fillMaxHeight(0.82f)
+            Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)
                 .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
                 .background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
@@ -403,7 +412,9 @@ private fun MobileSecretDetailSheet(
             Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(D.lineStrong))
             }
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
+            // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —
+            // упирается в остаток высоты шторки и скроллится (а не вылезает за край).
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                     SecretIcon(icon, tinted = tinted, color = color, size = 40)
                     Column {
@@ -424,33 +435,67 @@ private fun MobileSecretDetailSheet(
                     is CredentialSecret.Password -> Unit
                 }
                 UsedByHosts(hosts, mono)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     when (secret) {
                         is CredentialSecret.Certificate -> {
-                            PrimaryButton("Copy certificate", onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                GhostButton("Export", onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, modifier = Modifier.weight(1f))
-                                GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                            MobileSheetButton("Copy certificate", onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                MobileSheetButton("Export", onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, filled = false, modifier = Modifier.weight(1f))
+                                MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
                             }
                         }
                         is CredentialSecret.PrivateKey -> {
-                            PrimaryButton("Copy public key", onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                GhostButton("Export", onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
-                                GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                            MobileSheetButton("Copy public key", onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                MobileSheetButton("Export", onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
+                                MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
                             }
                         }
                         is CredentialSecret.Password -> {
                             // Пароль — чувствительный: платформенный путь (Android: sensitive-клип +
                             // автоочистка), а не обычный буфер, как для публичного ключа/сертификата.
-                            PrimaryButton("Copy password", onClick = { copyPasswordToClipboard(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+                            MobileSheetButton("Copy password", onClick = { copyPasswordToClipboard(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
             }
         }
+    }
+}
+
+/**
+ * Кнопка действий нижнего листа Vault в мобильной метрике (паритет с [MobileNewConnectionSheet]):
+ * 12-dp скругление, vertical 13-dp, 15-sp — крупный тач-таргет, а не desktop-[PrimaryButton] (8-dp/12-sp),
+ * который на телефоне выглядел мелким. [filled] — залитая cyan; иначе контурная. [danger] красит контур/текст
+ * в [D.sunset] (удаление).
+ */
+@Composable
+private fun MobileSheetButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: String? = null,
+    filled: Boolean = true,
+    danger: Boolean = false,
+) {
+    val fg = when {
+        filled -> Color(0xFF0A1A26)
+        danger -> D.sunset
+        else -> D.text
+    }
+    val base = Modifier.clip(RoundedCornerShape(12.dp))
+        .then(if (filled) Modifier.background(D.cyan) else Modifier.border(1.dp, if (danger) D.sunset.copy(alpha = 0.3f) else D.cyan14, RoundedCornerShape(12.dp)))
+    Row(
+        modifier.then(base)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) Sym(icon, size = 17.sp, color = fg)
+        Txt(label, color = fg, size = 15.sp, weight = if (filled) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
