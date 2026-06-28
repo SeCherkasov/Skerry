@@ -14,6 +14,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
 
 /**
@@ -154,3 +155,10 @@ val LocalVault: ProvidableCompositionLocal<Vault?> = staticCompositionLocalOf { 
  * железа/офскрин): экран настроек прячет тумблер. Поставляется за гейтом vault теми же провайдерами.
  */
 val LocalVaultBiometrics: ProvidableCompositionLocal<VaultBiometrics?> = staticCompositionLocalOf { null }
+
+/**
+ * Координатор self-hosted синхронизации (Phase 2): register/login/syncNow/disconnect + поток статуса.
+ * `null` — мок-путь/превью или платформа без sync: секция Sync в настройках рисует статичный макет.
+ * Поставляется [DesktopDesignApp]/[MobileDesignApp] за гейтом vault (для серверной обёртки нужен dataKey).
+ */
+val LocalSync: ProvidableCompositionLocal<SyncCoordinator?> = staticCompositionLocalOf { null }

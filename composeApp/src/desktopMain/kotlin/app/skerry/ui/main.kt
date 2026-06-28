@@ -24,7 +24,10 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.shared.snippet.FileSnippetStore
+import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.FileTunnelStore
+import app.skerry.ui.sync.FileSyncConfigStore
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
@@ -286,7 +289,20 @@ fun main() {
             }
             hosts.reload()
         }
-        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets)
+        // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и
+        // локальный vault. Привязка к серверу персистится в sync.json (0600) — несекретное
+        // (URL/accountId/deviceId); токены и пароль не храним (переавторизация по мастер-паролю).
+        // deviceId переиспользуем стабильный (тот же, что у записей vault). Курсор синка пока
+        // в памяти — при перезапуске будет полный re-pull (LWW идемпотентен), персист курсора отложен.
+        val sync = SyncCoordinator(
+            clientFactory = { url -> KtorSyncClient(url) },
+            crypto = IonspinVaultCrypto(),
+            vault = vault,
+            configStore = FileSyncConfigStore(dir.resolve("sync.json")),
+            deviceIdProvider = { deviceId(dir) },
+            deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
+        )
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -329,6 +345,7 @@ fun main() {
                     certificateInspector = deps.certificateInspector,
                     tunnels = deps.tunnels,
                     snippets = deps.snippets,
+                    sync = deps.sync,
                     onVaultUnlocked = onVaultUnlocked,
                     onVaultReset = onVaultReset,
                 )

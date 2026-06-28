@@ -70,6 +70,7 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
@@ -133,6 +134,9 @@ fun DesktopDesignApp(
     certificateInspector: SshCertificateInspector? = null,
     tunnels: TunnelManager? = null,
     snippets: SnippetManager? = null,
+    // Координатор self-hosted sync (Phase 2). `null` — sync не подключён на платформе/мок-путь:
+    // секция Sync в настройках рисует статичный макет, модалка-онбординг не показывается.
+    sync: SyncCoordinator? = null,
     features: FeatureFlags = FeatureFlags(),
     // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
     // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
@@ -195,6 +199,7 @@ fun DesktopDesignApp(
         // пароля из keychain (на desktop биометрии нет, путь сводится к мастер-паролю).
         LocalVault provides vault,
         LocalVaultBiometrics provides biometrics,
+        LocalSync provides sync,
     ) {
         if (vault != null) {
             VaultGate(
@@ -350,6 +355,9 @@ private fun DesktopChrome(
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)
+            // Модалка-онбординг sync поверх настроек: появляется по «Set up sync», закрывается сама
+            // при успешном подключении. Только когда координатор подан (мок-путь без бэкенда — нет).
+            LocalSync.current?.let { if (state.syncSetupOpen) SyncSetupDialog(it, onDismiss = state::closeSyncSetup) }
             if (onLock == null && state.locked) LockScreen(state)
             pendingHost?.let { host ->
                 DesktopPasswordDialog(

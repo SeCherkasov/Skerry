@@ -25,7 +25,7 @@ enum class MobileTab(val icon: String, val label: String) {
  * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт): терминал и деталь хоста
  * открываются из Hosts, а Ports/Known/Team — из таба More.
  */
-enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team, Appearance }
+enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team, Appearance, Sync }
 
 /**
  * Состояние мобильного макета — навигация (текущий таб + открытый push-экран) и оверлей листа

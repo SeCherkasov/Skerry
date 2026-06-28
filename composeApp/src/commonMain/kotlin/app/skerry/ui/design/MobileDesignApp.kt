@@ -128,6 +128,8 @@ fun MobileDesignApp(
         // Vault + биометрия — экрану More для тумблера «разблокировка биометрией» (включить/перенастроить).
         LocalVault provides deps.vault,
         LocalVaultBiometrics provides deps.biometrics,
+        // Координатор self-hosted sync — push-экран More → «Security & sync».
+        LocalSync provides deps.sync,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault
@@ -306,6 +308,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Known -> MobileKnownScreen(state)
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
         MobileRoute.Appearance -> MobileAppearanceScreen(state)
+        MobileRoute.Sync -> MobileSyncScreen(state)
     }
 }
 

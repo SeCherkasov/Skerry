@@ -1,0 +1,213 @@
+package app.skerry.ui.design
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.sync.SyncSetupForm
+import app.skerry.ui.sync.SyncSetupMode
+import app.skerry.ui.sync.SyncStatus
+import kotlinx.coroutines.launch
+
+/**
+ * Модалка-онбординг self-hosted sync (в макете её нет — макет показывает только подключённое
+ * состояние): адрес сервера + accountId + мастер-пароль, режим Register/Login. Zero-knowledge —
+ * пароль уходит в [SyncCoordinator] как CharArray и там затирается; здесь держим его строкой ровно
+ * до отправки и обнуляем сразу после. Стиль — скрим + карточка, как [DesktopPasswordDialog].
+ *
+ * Закрывается сама, когда координатор перешёл в [SyncStatus.Online] (успешное подключение).
+ */
+@Composable
+fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
+    val noop = remember { MutableInteractionSource() }
+    val scope = rememberCoroutineScope()
+    val status by sync.status.collectAsState()
+
+    var mode by remember { mutableStateOf(SyncSetupMode.Register) }
+    var serverUrl by remember { mutableStateOf("") }
+    var account by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    val form = SyncSetupForm(serverUrl, account)
+    val canSubmit = form.canSubmit(password.length) && status != SyncStatus.Busy
+
+    // Успешное подключение закрывает модалку; пароль обнуляем независимо от исхода.
+    LaunchedEffect(status) {
+        if (status is SyncStatus.Online) {
+            password = ""
+            onDismiss()
+        }
+    }
+
+    val submit = submit@{
+        if (!canSubmit) return@submit
+        val pw = password.toCharArray() // координатор затрёт массив
+        password = ""
+        val url = form.normalizedServerUrl
+        val acc = form.normalizedAccountId
+        scope.launch {
+            when (mode) {
+                SyncSetupMode.Register -> sync.register(url, acc, pw)
+                SyncSetupMode.Login -> sync.login(url, acc, pw)
+            }
+        }
+    }
+
+    Box(
+        Modifier.fillMaxSize().background(Color(0xB3060E16))
+            .clickable(interactionSource = noop, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .widthIn(max = 440.dp)
+                .fillMaxWidth()
+                .padding(20.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(D.surfaceDeep)
+                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .clickable(interactionSource = noop, indication = null, onClick = {})
+                .padding(26.dp),
+        ) {
+            Txt("Set up sync", color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(
+                "End-to-end encrypted. Skerry never sees your data in plaintext — only your device holds the master password.",
+                color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+            )
+
+            // Сегментный переключатель Register / Login.
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(D.bg).border(1.dp, D.cyan08, RoundedCornerShape(8.dp)).padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                ModeTab("New account", mode == SyncSetupMode.Register, Modifier.weight(1f)) { mode = SyncSetupMode.Register }
+                ModeTab("Existing", mode == SyncSetupMode.Login, Modifier.weight(1f)) { mode = SyncSetupMode.Login }
+            }
+
+            FieldLabel("SERVER URL", top = 16.dp)
+            SyncField("https://sync.example.com", serverUrl, "dns", KeyboardType.Uri, ImeAction.Next) { serverUrl = it }
+
+            FieldLabel("ACCOUNT")
+            SyncField("you@example.com", account, "person", KeyboardType.Text, ImeAction.Next) { account = it }
+
+            FieldLabel("MASTER PASSWORD")
+            SyncField("master password", password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
+
+            val failed = status as? SyncStatus.Failed
+            if (failed != null) {
+                Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Sym("error", size = 14.sp, color = D.sunset)
+                    Txt(failed.message, color = D.sunset, size = 11.5.sp)
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth().padding(top = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Sym("shield_lock", size = 14.sp, color = D.moss)
+                    Txt(
+                        if (status == SyncStatus.Busy) "Connecting…" else "Zero-knowledge",
+                        color = D.faint, size = 11.sp,
+                    )
+                }
+                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
+                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                }
+                val label = if (mode == SyncSetupMode.Register) "Create account" else "Log in"
+                PrimaryButton(label, onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModeTab(label: String, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (active) D.cyan10 else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Txt(label, color = if (active) D.cyanBright else D.dim, size = 12.sp, weight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun FieldLabel(text: String, top: androidx.compose.ui.unit.Dp = 12.dp) {
+    Txt(text, color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = top, bottom = 5.dp))
+}
+
+@Composable
+private fun SyncField(
+    placeholder: String,
+    value: String,
+    icon: String,
+    keyboardType: KeyboardType,
+    imeAction: ImeAction,
+    secret: Boolean = false,
+    onSubmit: () -> Unit = {},
+    onChange: (String) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym(icon, size = 16.sp, color = D.faint)
+        val ui = LocalFonts.current.ui
+        val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+        Box(Modifier.fillMaxWidth()) {
+            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
+                textStyle = style,
+                cursorBrush = SolidColor(D.cyan),
+                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
+                keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}

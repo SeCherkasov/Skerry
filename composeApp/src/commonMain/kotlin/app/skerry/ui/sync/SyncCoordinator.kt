@@ -13,6 +13,7 @@ import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
 
 /** Где приложение хранит настройку sync (URL сервера, accountId, deviceId) между запусками. */
@@ -132,7 +133,14 @@ class SyncCoordinator(
     suspend fun listDevices(): List<RemoteDevice> {
         val c = client ?: return emptyList()
         val s = session ?: return emptyList()
-        return runCatching { c.listDevices(s) }.getOrDefault(emptyList())
+        // НЕ runCatching: он поглотил бы CancellationException и порвал structured concurrency.
+        return try {
+            c.listDevices(s)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */

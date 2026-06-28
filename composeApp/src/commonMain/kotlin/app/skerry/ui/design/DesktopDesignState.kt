@@ -125,6 +125,9 @@ class DesktopDesignState(
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
     var settingsOpen: Boolean by mutableStateOf(false); private set
+
+    /** Открыта ли модалка-онбординг настройки sync (Settings → Sync → «Set up sync»). */
+    var syncSetupOpen: Boolean by mutableStateOf(false); private set
     var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
     var split: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
@@ -230,6 +233,8 @@ class DesktopDesignState(
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
     fun openSettings() { settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
+    fun openSyncSetup() { syncSetupOpen = true }
+    fun closeSyncSetup() { syncSetupOpen = false }
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +69,7 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("groups", D.cyanBright, "Team", if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
             MoreRow("auto_awesome", D.amber, "AI & privacy", "Local", D.dim, onClick = null)
             MoreRow("palette", D.cyanBright, "Appearance", "Night Sea", D.dim, onClick = { state.push(MobileRoute.Appearance) })
-            MoreRow("shield_lock", D.cyanBright, "Security & sync", if (preview) "Synced" else "Local only", D.dim, onClick = null)
+            MoreRow("shield_lock", D.cyanBright, "Security & sync", if (preview) "Synced" else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
             // Тумблер биометрии — живой путь за гейтом (vault открыт). Прячется, если биометрия
             // недоступна на устройстве (нет железа/не зачислен отпечаток) или это превью/офскрин.
             if (!preview) BiometricUnlockRow()
@@ -84,6 +85,18 @@ private fun portsSubtitle(): String {
     // сессии. null (нет менеджера: превью/офскрин) → пустой подзаголовок.
     val manager = LocalTunnels.current ?: return mobileMorePortsSubtitle(null)
     return mobileMorePortsSubtitle(mobileActiveTunnelCount(manager.tunnels))
+}
+
+/** Подзаголовок строки «Security & sync»: статус координатора sync (нет/локально/подключено). */
+@Composable
+private fun syncSubtitle(): String {
+    val sync = LocalSync.current ?: return "Local only"
+    return when (sync.status.collectAsState().value) {
+        is app.skerry.ui.sync.SyncStatus.Online -> "Synced"
+        app.skerry.ui.sync.SyncStatus.Busy -> "Syncing…"
+        is app.skerry.ui.sync.SyncStatus.Failed -> "Sync error"
+        app.skerry.ui.sync.SyncStatus.Disabled -> "Local only"
+    }
 }
 
 @Composable

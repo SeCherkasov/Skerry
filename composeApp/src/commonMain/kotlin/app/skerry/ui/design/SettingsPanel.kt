@@ -20,9 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,8 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
+import kotlinx.coroutines.launch
 
 /** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
 @Composable
@@ -70,7 +74,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                     SettingsTab.Appearance -> AppearanceSection(state)
                     SettingsTab.Terminal -> TerminalSection()
                     SettingsTab.Account -> AccountSection()
-                    SettingsTab.Sync -> SyncSection()
+                    SettingsTab.Sync -> SyncSection(state)
                     SettingsTab.Security -> SecuritySection()
                     SettingsTab.Keyboard -> KeyboardSection()
                     SettingsTab.About -> AboutSection()
@@ -358,25 +362,68 @@ private fun DeviceRow(icon: String, name: String, sub: String, trailing: String?
 // Sync.
 
 @Composable
-private fun SyncSection() {
+private fun SyncSection(state: DesktopDesignState) {
     SectionTitle("Sync", "End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.")
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Sym("cloud_done", size = 20.sp, color = D.moss)
-        Column(Modifier.weight(1f)) {
-            Txt("Synced 2 minutes ago", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt("9 hosts · 4 snippets · 3 keys · 2 vaults", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+    // Мок-путь и живой путь — разные composable (а не условный remember/collectAsState в одном теле):
+    // rememberCoroutineScope/collectAsState должны вызываться безусловно в своём composable (правило
+    // слотовой таблицы Compose). LocalSync.current стабилен (staticCompositionLocalOf), но строгий
+    // паттерн — ветвление на отдельные функции, каждая со своими remember-вызовами.
+    val sync = LocalSync.current
+    if (sync == null) {
+        // Мок-путь/превью без бэкенда: статичная карточка макета (подключённое состояние).
+        SyncStatusCard("cloud_done", D.moss, "Synced 2 minutes ago", "9 hosts · 4 snippets · 3 keys · 2 vaults") {
+            GhostButton("Sync now", onClick = {})
         }
-        GhostButton("Sync now", onClick = {})
+    } else {
+        LiveSyncStatus(sync, state)
     }
     Txt("WHAT SYNCS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
     SettingToggleRow("Hosts & groups", "", on = true, onToggle = {})
     SettingToggleRow("Snippets", "", on = true, onToggle = {})
     SettingToggleRow("SSH keys · re-encrypted on device", "", on = true, onToggle = {})
     SettingToggleRow("Terminal history", "Off by default for privacy.", on = false, onToggle = {})
+}
+
+/** Живой статус sync: безусловные rememberCoroutineScope/collectAsState внутри своего composable. */
+@Composable
+private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
+    val scope = rememberCoroutineScope()
+    when (val status = sync.status.collectAsState().value) {
+        is SyncStatus.Online -> SyncStatusCard(
+            "cloud_done", D.moss,
+            "Connected · ${status.accountId}",
+            "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session",
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                GhostButton("Sync now", onClick = { scope.launch { sync.syncNow() } })
+                GhostButton("Disconnect", onClick = { scope.launch { sync.disconnect() } }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+            }
+        }
+        SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.") {}
+        is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, "Sync error", status.message) {
+            GhostButton("Set up sync", onClick = state::openSyncSetup)
+        }
+        SyncStatus.Disabled -> SyncStatusCard("cloud_off", D.faint, "Not connected", "Set up a self-hosted server to sync across devices.") {
+            PrimaryButton("Set up sync", onClick = state::openSyncSetup, icon = "cloud_sync")
+        }
+    }
+}
+
+/** Карточка статуса sync: иконка + заголовок/подпись + правый слот (кнопки действий). */
+@Composable
+private fun SyncStatusCard(icon: String, iconColor: Color, title: String, subtitle: String, action: @Composable () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Sym(icon, size = 20.sp, color = iconColor)
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        action()
+    }
 }
 
 // Security.
