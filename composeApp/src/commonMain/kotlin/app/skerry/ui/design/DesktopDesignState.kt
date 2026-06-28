@@ -7,6 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TerminalFont
 
 /** Левый rail / основные view макета. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
@@ -102,6 +105,13 @@ class DesktopDesignState(
     // могут — поэтому держим их именами здесь и персистим. Дефолты (пусто, no-op) — для мок/превью/тестов.
     initialCustomGroups: List<String> = emptyList(),
     private val onCustomGroupsChange: (List<String>) -> Unit = {},
+    // Шрифт терминала (Appearance → Font) и его кегль. Стартовые значения читаются из персиста при
+    // запуске, колбэки пишут их обратно — выбор переживает перезапуск. Дефолты (Hack 13px, no-op) —
+    // для мок/превью/тестов.
+    initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
+    private val onTerminalFontChange: (TerminalFont) -> Unit = {},
+    initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
+    private val onTerminalFontSizeChange: (Int) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -129,6 +139,12 @@ class DesktopDesignState(
 
     /** Имена пользовательских (пока пустых) групп хостов — показываются как папки наравне с выводимыми из хостов. */
     var customGroups: List<String> by mutableStateOf(initialCustomGroups); private set
+
+    /** Выбранный шрифт терминала (Appearance → Font). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalAppearance]. */
+    var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
+
+    /** Кегль шрифта терминала, px (Appearance → Font size). */
+    var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
 
     /** Открытый диалог управления группой (создание/правка) или `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
@@ -289,6 +305,23 @@ class DesktopDesignState(
             collapsedGroups = collapsedGroups - name
             onCollapsedGroupsChange(collapsedGroups)
         }
+    }
+
+    /** Выбрать шрифт терминала и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    fun chooseTerminalFont(font: TerminalFont) {
+        if (font == terminalFont) return
+        terminalFont = font
+        onTerminalFontChange(font)
+    }
+
+    /**
+     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZES]
+     * и повтор текущего — no-op (ни записи, ни колбэка).
+     */
+    fun chooseTerminalFontSize(px: Int) {
+        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZES) return
+        terminalFontSize = px
+        onTerminalFontSizeChange(px)
     }
 
     fun toggleSanitize() { sanitize = !sanitize }

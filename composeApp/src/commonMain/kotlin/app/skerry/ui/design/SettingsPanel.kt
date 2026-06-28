@@ -20,15 +20,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TerminalFont
 
 /** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
 @Composable
@@ -61,7 +67,7 @@ fun SettingsPanel(state: DesktopDesignState) {
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 26.dp, vertical = 22.dp)) {
                 when (effectiveTab) {
                     SettingsTab.AI -> AiSection(state)
-                    SettingsTab.Appearance -> AppearanceSection()
+                    SettingsTab.Appearance -> AppearanceSection(state)
                     SettingsTab.Terminal -> TerminalSection()
                     SettingsTab.Account -> AccountSection()
                     SettingsTab.Sync -> SyncSection()
@@ -157,7 +163,7 @@ private fun ProviderCard(icon: String, title: String, desc: String, selected: Bo
 // Appearance.
 
 @Composable
-private fun AppearanceSection() {
+private fun AppearanceSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     SectionTitle("Appearance", "Pick a terminal theme. Themes apply per-connection or globally.")
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -172,15 +178,85 @@ private fun AppearanceSection() {
     Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f)) {
             Txt("Font", color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
-            SettingsSelect("JetBrains Mono")
+            FontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
         }
         Column(Modifier.weight(1f)) {
             Txt("Font size", color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
-                Txt("13 px", color = D.text, size = 13.sp)
-            }
+            FontSizePicker(state.terminalFontSize, onPick = state::chooseTerminalFontSize)
         }
     }
+}
+
+/** Выпадающий список шрифта терминала (Hack / JetBrains Mono) — оба без лигатур. */
+@Composable
+private fun FontPicker(current: TerminalFont, onPick: (TerminalFont) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            SelectTrigger(current.displayName, onClick = { open = !open })
+        },
+        menu = { width ->
+            DropdownMenuColumn(width) {
+                TerminalFont.entries.forEach { option ->
+                    DropdownOption(option.displayName, selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Выпадающий список кегля шрифта терминала ([TERMINAL_FONT_SIZES], px). */
+@Composable
+private fun FontSizePicker(current: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            SelectTrigger("$current px", onClick = { open = !open })
+        },
+        menu = { width ->
+            DropdownMenuColumn(width) {
+                TERMINAL_FONT_SIZES.forEach { size ->
+                    DropdownOption("$size px", selected = size == current) { onPick(size); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Триггер селекта макета: значение слева, шеврон справа (как статичный [SettingsSelect], но кликабельный). */
+@Composable
+private fun SelectTrigger(value: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).clickable(onClick = onClick).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Txt(value, color = D.text, size = 12.5.sp)
+        Sym("expand_more", size = 16.sp, color = D.faint)
+    }
+}
+
+/** Колонка-меню выпадающего списка (поверхность + обводка макета). */
+@Composable
+private fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
+    Column(
+        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)),
+    ) { content() }
+}
+
+/** Пункт выпадающего списка; выбранный подсвечен cyan. */
+@Composable
+private fun DropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    Txt(
+        label,
+        color = if (selected) D.cyanBright else D.text,
+        size = 12.5.sp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
+    )
 }
 
 @Composable

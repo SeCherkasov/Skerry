@@ -29,6 +29,9 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
 import app.skerry.ui.vault.ResetScope
@@ -163,6 +166,41 @@ private fun writeSftpShowHidden(dir: Path, show: Boolean) {
     }
 }
 
+/**
+ * Шрифт терминала (Appearance → Font), переживающий перезапуск: стабильный id ([TerminalFont.id]) в
+ * файле `terminal_font`. Отсутствует/нечитаем/неизвестен → дефолт ([TerminalFont.DEFAULT] = Hack).
+ * Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readTerminalFont(dir: Path): TerminalFont {
+    val file = dir.resolve("terminal_font")
+    return runCatching { TerminalFont.fromId(Files.readString(file).trim()) }.getOrDefault(TerminalFont.DEFAULT)
+}
+
+private fun writeTerminalFont(dir: Path, font: TerminalFont) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_font"), font.id)
+    }
+}
+
+/**
+ * Кегль шрифта терминала, px (Appearance → Font size), переживающий перезапуск: число в файле
+ * `terminal_font_size`. Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZES] → дефолт
+ * ([DEFAULT_TERMINAL_FONT_SIZE]). Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readTerminalFontSize(dir: Path): Int {
+    val file = dir.resolve("terminal_font_size")
+    val px = runCatching { Files.readString(file).trim().toInt() }.getOrDefault(DEFAULT_TERMINAL_FONT_SIZE)
+    return if (px in TERMINAL_FONT_SIZES) px else DEFAULT_TERMINAL_FONT_SIZE
+}
+
+private fun writeTerminalFontSize(dir: Path, px: Int) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_font_size"), px.toString())
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -242,6 +280,8 @@ fun main() {
                     writeRecentHostIds(dir, emptyList())
                     writeCollapsedGroups(dir, emptySet())
                     writeCustomGroups(dir, emptyList())
+                    writeTerminalFont(dir, TerminalFont.DEFAULT)
+                    writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
                 }
             }
             hosts.reload()
@@ -275,6 +315,10 @@ fun main() {
                     onCustomGroupsChange = { writeCustomGroups(dir, it) },
                     initialSftpShowHidden = readSftpShowHidden(dir),
                     onSftpShowHiddenChange = { writeSftpShowHidden(dir, it) },
+                    initialTerminalFont = readTerminalFont(dir),
+                    onTerminalFontChange = { writeTerminalFont(dir, it) },
+                    initialTerminalFontSize = readTerminalFontSize(dir),
+                    onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

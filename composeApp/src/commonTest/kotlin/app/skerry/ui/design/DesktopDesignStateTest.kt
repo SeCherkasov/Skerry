@@ -1,6 +1,7 @@
 package app.skerry.ui.design
 
 import app.skerry.shared.host.Host
+import app.skerry.ui.terminal.TerminalFont
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -383,6 +384,44 @@ class DesktopDesignStateTest {
         s.removeCustomGroup("Prod")
         assertEquals(listOf("Dev"), s.customGroups)
         assertFalse(s.isGroupCollapsed("Prod"))
+    }
+
+    // Шрифт и кегль терминала (Appearance → Font / Font size)
+
+    @Test
+    fun terminal_font_defaults_to_hack_13px() {
+        val s = DesktopDesignState()
+        assertEquals(TerminalFont.Hack, s.terminalFont)
+        assertEquals(13, s.terminalFontSize)
+    }
+
+    @Test
+    fun terminal_font_honours_initial_values() {
+        val s = DesktopDesignState(initialTerminalFont = TerminalFont.JetBrainsMono, initialTerminalFontSize = 16)
+        assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
+        assertEquals(16, s.terminalFontSize)
+    }
+
+    @Test
+    fun setTerminalFont_updates_and_reports_once_skipping_repeat() {
+        val seen = mutableListOf<TerminalFont>()
+        val s = DesktopDesignState(onTerminalFontChange = { seen += it })
+        s.chooseTerminalFont(TerminalFont.JetBrainsMono)
+        s.chooseTerminalFont(TerminalFont.JetBrainsMono) // повтор того же — no-op
+        assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
+        assertEquals(listOf(TerminalFont.JetBrainsMono), seen)
+    }
+
+    @Test
+    fun setTerminalFontSize_updates_and_reports_skipping_repeat_and_out_of_range() {
+        val seen = mutableListOf<Int>()
+        val s = DesktopDesignState(onTerminalFontSizeChange = { seen += it })
+        s.chooseTerminalFontSize(16)
+        s.chooseTerminalFontSize(16)   // повтор — no-op
+        s.chooseTerminalFontSize(99)   // вне TERMINAL_FONT_SIZES — no-op
+        s.chooseTerminalFontSize(11)
+        assertEquals(11, s.terminalFontSize)
+        assertEquals(listOf(16, 11), seen)
     }
 
     @Test

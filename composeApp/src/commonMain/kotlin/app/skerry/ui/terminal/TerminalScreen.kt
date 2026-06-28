@@ -74,7 +74,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -108,11 +107,7 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.jetbrainsmono_bold
-import app.skerry.ui.generated.resources.jetbrainsmono_regular
 import app.skerry.ui.theme.SkerryColors
-import org.jetbrains.compose.resources.Font
 
 /** Порог между кликами (мс), в пределах которого они складываются в двойной/тройной. */
 private const val DOUBLE_CLICK_MS = 350
@@ -120,23 +115,11 @@ private const val DOUBLE_CLICK_MS = 350
 /** Полупериод мигания курсора (мс) — стандартный xterm-ритм ~530 мс на фазу. */
 private const val CURSOR_BLINK_MS = 530L
 
-private const val FONT_SIZE_SP = 13
-private const val LINE_HEIGHT_SP = 18
 private const val PADDING_DP = 14
 
 /** Радиус «капли» тач-маркера выделения и радиус зоны попадания пальца по нему. */
 private const val HANDLE_RADIUS_DP = 7
 private const val HANDLE_TOUCH_RADIUS_DP = 22
-
-/**
- * Моноширинное семейство Skerry — JetBrains Mono из compose-resources.
- * `Font(...)` сам @Composable и кэширует ресурс внутри, поэтому remember не нужен.
- */
-@Composable
-fun rememberJetBrainsMono(): FontFamily = FontFamily(
-    Font(Res.font.jetbrainsmono_regular, weight = FontWeight.Normal),
-    Font(Res.font.jetbrainsmono_bold, weight = FontWeight.Bold),
-)
 
 /**
  * Интерактивный терминал: рендерит модель экрана [TerminalScreenState.screen] (сетку ячеек с
@@ -166,12 +149,21 @@ fun TerminalScreen(
     imeInput: Boolean = false,
     imeTransform: ((String) -> String)? = null,
 ) {
-    val mono = rememberJetBrainsMono()
-    val textStyle = remember(mono) {
+    // Шрифт и кегль терминала — из настроек Appearance ([LocalTerminalAppearance]); дефолт Hack 13px
+    // там, где провайдер не выставлен (мобильный таргет/превью/экран подключения). Лигатуры гасим
+    // всегда ([NO_LIGATURES]), чтобы `->`/`=>`/`!=` не склеивались независимо от выбранного шрифта.
+    val appearance = LocalTerminalAppearance.current
+    val mono = rememberTerminalFontFamily(appearance.font)
+    // Ключ — сам appearance (@Immutable data class, структурное равенство): меняется ровно при выборе
+    // нового шрифта/кегля. FontFamily ключом ненадёжен — равенство двух собранных инстансов зависит от
+    // equals у Font compose-resources, и при reference-equality textStyle/metrics инвалидировались бы
+    // на каждой рекомпозиции. mono захватывается лямбдой и согласован с appearance.font.
+    val textStyle = remember(appearance) {
         TextStyle(
             fontFamily = mono,
-            fontSize = FONT_SIZE_SP.sp,
-            lineHeight = LINE_HEIGHT_SP.sp,
+            fontFeatureSettings = NO_LIGATURES,
+            fontSize = appearance.fontSizeSp.sp,
+            lineHeight = (appearance.fontSizeSp * TERMINAL_LINE_HEIGHT_RATIO).sp,
             color = SkerryColors.text,
         )
     }
@@ -217,7 +209,7 @@ fun TerminalScreen(
         val sample = measurer.measure(AnnotatedString("M".repeat(sampleLen)), textStyle)
         TerminalMetrics(
             cellWidth = sample.size.width / sampleLen.toFloat(),
-            cellHeight = with(density) { LINE_HEIGHT_SP.sp.toPx() },
+            cellHeight = with(density) { textStyle.lineHeight.toPx() },
         )
     }
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }

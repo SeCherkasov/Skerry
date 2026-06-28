@@ -70,6 +70,10 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.TerminalAppearance
+import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
@@ -102,10 +106,16 @@ fun DesktopDesignApp(
     // Показ скрытых в SFTP (Ctrl+H) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
     initialSftpShowHidden: Boolean = true,
     onSftpShowHiddenChange: (Boolean) -> Unit = {},
+    // Шрифт терминала и его кегль (Appearance → Font / Font size) — персистятся снаружи (desktop main).
+    initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
+    onTerminalFontChange: (TerminalFont) -> Unit = {},
+    initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
+    onTerminalFontSizeChange: (Int) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
             initialRecentHostIds, onRecentHostIdsChange, initialCustomGroups, onCustomGroupsChange,
+            initialTerminalFont, onTerminalFontChange, initialTerminalFontSize, onTerminalFontSizeChange,
         )
     },
     vault: Vault? = null,
@@ -159,6 +169,13 @@ fun DesktopDesignApp(
     DisposableEffect(liveSessions) {
         onDispose { if (ownsSessions) liveSessions?.disconnectAll() }
     }
+    // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке), а
+    // DesktopDesignApp рекомпозируется на смене вкладок/сессий/событий vault. Без remember новый
+    // инстанс на каждой рекомпозиции форсил бы полный пересбор поддерева потребителей (весь Canvas
+    // терминала), даже когда шрифт/кегль не менялись.
+    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize) {
+        TerminalAppearance(state.terminalFont, state.terminalFontSize)
+    }
     CompositionLocalProvider(
         LocalFonts provides fonts,
         LocalHosts provides hosts,
@@ -172,6 +189,8 @@ fun DesktopDesignApp(
         LocalSnippets provides snippets,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
+        // Внешний вид терминала из настроек: шрифт + кегль читает [app.skerry.ui.terminal.TerminalScreen].
+        LocalTerminalAppearance provides terminalAppearance,
         // Открытый vault + биометрия за гейтом — нужны повторной аутентификации перед копированием
         // пароля из keychain (на desktop биометрии нет, путь сводится к мастер-паролю).
         LocalVault provides vault,
