@@ -84,6 +84,14 @@ class SyncCoordinator(
     private val syncState: SyncStateStore = InMemorySyncStateStore(),
     private val deviceIdProvider: () -> String = { randomDeviceId() },
     private val deviceName: String = "Skerry device",
+    /**
+     * Вызывается, когда при входе принят ОТЛИЧНЫЙ от локального ключ аккаунта ([Vault.adoptDataKey]
+     * вернул true) — то есть dataKey vault сменился. Биометрический артефакт (`vault.bio`) обёрнут
+     * под старым ключом и теперь даёт неверный ключ при разблокировке отпечатком, поэтому платформа
+     * сбрасывает биометрию (пользователь включит её заново уже с новым ключом). Тихий re-wrap
+     * невозможен — он требует системного промпта отпечатка. На устройстве без биометрии — no-op.
+     */
+    private val onDataKeyAdopted: () -> Unit = {},
 ) {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Disabled)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
@@ -193,7 +201,12 @@ class SyncCoordinator(
             password.fill(' ')
             return
         }
-        vault.adoptDataKey(accountDataKey, password)
+        // Ключ сменился → биометрия обёрнута под старым ключом и стала бы давать неверный dataKey
+        // при разблокировке отпечатком: просим платформу сбросить её (runCatching — сбой биометрии
+        // не должен валить подключение).
+        if (vault.adoptDataKey(accountDataKey, password)) {
+            runCatching { onDataKeyAdopted() }
+        }
     }
 
     /** Прогнать один цикл синхронизации (pull/merge/push). No-op, если не подключены. */

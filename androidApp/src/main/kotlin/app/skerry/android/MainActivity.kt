@@ -253,6 +253,10 @@ class MainActivity : FragmentActivity() {
             configStore = AndroidSyncConfigStore(File(dir, "sync.json")),
             deviceIdProvider = { deviceId(dir) },
             deviceName = android.os.Build.MODEL?.takeIf { it.isNotBlank() } ?: "Skerry Android",
+            // При входе принят ключ аккаунта (dataKey vault сменился) → биометрия обёрнута под старым
+            // ключом и дала бы неверный ключ при разблокировке отпечатком (синканутые записи не
+            // расшифровались бы). Сбрасываем — пользователь включит отпечаток заново уже с новым ключом.
+            onDataKeyAdopted = { biometrics.disable() },
         )
         // Миграция секретов в vault (IDENTITY → CREDENTIAL) при разблокировке — идемпотентна.
         // После — reload менеджеров и восстановление sync-сессии. Переноса старого локального
