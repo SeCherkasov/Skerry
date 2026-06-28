@@ -1,0 +1,40 @@
+# Skerry Sync — self-hosted (AGPL-3.0).
+#   docker compose up -d --build
+# По умолчанию SQLite в именованном томе (нулевая настройка). Для PostgreSQL —
+# раскомментируйте сервис `db` и блок postgres-переменных у `sync`.
+
+services:
+  sync:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      SKERRY_DB_URL: jdbc:sqlite:/data/skerry-sync.db
+      # ОБЯЗАТЕЛЬНО задайте устойчивый секрет в проде (иначе токены инвалидируются при рестарте):
+      SKERRY_JWT_SECRET: ${SKERRY_JWT_SECRET:-dev-insecure-change-me}
+      SKERRY_ADMIN_TOKEN: ${SKERRY_ADMIN_TOKEN:-}
+      # --- PostgreSQL (опционально) ---
+      # SKERRY_DB_URL: jdbc:postgresql://db:5432/skerry
+      # SKERRY_DB_USER: skerry
+      # SKERRY_DB_PASSWORD: ${POSTGRES_PASSWORD:-skerry}
+    volumes:
+      - skerry-data:/data
+    restart: unless-stopped
+    # depends_on:
+    #   - db
+
+  # db:
+  #   image: postgres:17-alpine
+  #   environment:
+  #     POSTGRES_DB: skerry
+  #     POSTGRES_USER: skerry
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skerry}
+  #   volumes:
+  #     - skerry-pg:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+volumes:
+  skerry-data:
+  # skerry-pg:

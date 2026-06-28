@@ -4,6 +4,7 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
@@ -112,6 +113,8 @@ private class FakeCredVault : Vault {
     override fun reset() { payloads.clear(); records.clear() }
 
     override fun records(): List<VaultRecord> = records.values.toList()
+    override fun syncMeta(): SyncMeta? = null
+    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
     override fun openPayload(id: String): ByteArray? =
         records[id]?.takeIf { !it.deleted }?.let { payloads[id] }
 

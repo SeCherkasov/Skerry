@@ -2,6 +2,7 @@ package app.skerry.ui.vault
 
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
@@ -35,6 +36,8 @@ class SecretCopyAuthorizerTest {
         override fun lock() = Unit
         override fun reset() = Unit
         override fun records(): List<VaultRecord> = emptyList()
+        override fun syncMeta(): SyncMeta? = null
+        override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
         override fun openPayload(id: String): ByteArray? = null
         override fun put(id: String, type: RecordType, payload: ByteArray) = Unit
         override fun remove(id: String) = Unit

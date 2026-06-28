@@ -1,0 +1,10 @@
+# Контекст Docker-сборки sync-сервера: исключаем артефакты и кэши, оставляем исходники + wrapper.
+.git
+.gradle
+.kotlin
+.idea
+**/build
+*.db
+*.db-journal
+local.properties
+docs
