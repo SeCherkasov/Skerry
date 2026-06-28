@@ -22,7 +22,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +39,6 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
 import app.skerry.ui.sync.SyncSetupMode
 import app.skerry.ui.sync.SyncStatus
-import kotlinx.coroutines.launch
 
 /**
  * Push-экран More → «Security & sync»: self-hosted синхронизация (Phase 2). В мобильном идиоме
@@ -78,13 +76,12 @@ fun MobileSyncScreen(state: MobileDesignState) {
 
 @Composable
 private fun SyncBody(sync: SyncCoordinator) {
-    val scope = rememberCoroutineScope()
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> {
             MobileSyncStatusCard("cloud_done", D.moss, "Connected · ${status.accountId}", "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session")
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton("Sync now", onClick = { scope.launch { sync.syncNow() } }, icon = "sync")
-                GhostButton("Disconnect", onClick = { scope.launch { sync.disconnect() } }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+                PrimaryButton("Sync now", onClick = { sync.syncNow() }, icon = "sync")
+                GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             }
         }
         SyncStatus.Busy -> MobileSyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.")
@@ -98,7 +95,6 @@ private fun SyncSetupBody(
     sync: SyncCoordinator,
     errorMessage: String?,
 ) {
-    val scope = rememberCoroutineScope()
     var mode by remember { mutableStateOf(SyncSetupMode.Register) }
     var serverUrl by remember { mutableStateOf("") }
     var account by remember { mutableStateOf("") }
@@ -138,11 +134,11 @@ private fun SyncSetupBody(
             password = ""
             val url = form.normalizedServerUrl
             val acc = form.normalizedAccountId
-            scope.launch {
-                when (mode) {
-                    SyncSetupMode.Register -> sync.register(url, acc, pw)
-                    SyncSetupMode.Login -> sync.login(url, acc, pw)
-                }
+            // Запуск держит сам координатор (свой scope) — форма уйдёт из композиции на Busy,
+            // привязывать к ней корутину нельзя (иначе отмена на полпути).
+            when (mode) {
+                SyncSetupMode.Register -> sync.register(url, acc, pw)
+                SyncSetupMode.Login -> sync.login(url, acc, pw)
             }
         },
         modifier = Modifier.padding(top = 18.dp),

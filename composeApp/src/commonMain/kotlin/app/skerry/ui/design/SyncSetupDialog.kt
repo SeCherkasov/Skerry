@@ -21,7 +21,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -41,7 +40,6 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
 import app.skerry.ui.sync.SyncSetupMode
 import app.skerry.ui.sync.SyncStatus
-import kotlinx.coroutines.launch
 
 /**
  * Модалка-онбординг self-hosted sync (в макете её нет — макет показывает только подключённое
@@ -54,7 +52,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    val scope = rememberCoroutineScope()
     val status by sync.status.collectAsState()
 
     var mode by remember { mutableStateOf(SyncSetupMode.Register) }
@@ -79,11 +76,10 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
         password = ""
         val url = form.normalizedServerUrl
         val acc = form.normalizedAccountId
-        scope.launch {
-            when (mode) {
-                SyncSetupMode.Register -> sync.register(url, acc, pw)
-                SyncSetupMode.Login -> sync.login(url, acc, pw)
-            }
+        // Запуск держит сам координатор (свой scope) — не привязываем к жизни этого composable.
+        when (mode) {
+            SyncSetupMode.Register -> sync.register(url, acc, pw)
+            SyncSetupMode.Login -> sync.login(url, acc, pw)
         }
     }
 

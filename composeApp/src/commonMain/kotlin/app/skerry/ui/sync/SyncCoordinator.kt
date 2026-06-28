@@ -10,9 +10,13 @@ import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
 
@@ -66,15 +70,24 @@ class SyncCoordinator(
     private var client: SyncClient? = null
     private var session: SyncSession? = null
 
+    // Собственный scope: сетевые операции НЕ должны зависеть от жизненного цикла composable.
+    // На мобильном форма перерисовывается по [status]: как только connect() ставит Busy, форма
+    // покидает композицию — и если бы запуск шёл от её rememberCoroutineScope, операция отменилась бы
+    // на полпути («rememberCoroutineScope left the composition»). Запуск здесь это исключает; Argon2id
+    // (тяжёлый) тоже уходит с main-потока на Dispatchers.Default.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     val isConfigured: Boolean get() = configStore.load() != null
 
-    /** Регистрация нового аккаунта на сервере с текущим (разблокированным) vault. */
-    suspend fun register(serverUrl: String, accountId: String, masterPassword: CharArray) =
-        connect(serverUrl, accountId, masterPassword, registering = true)
+    /** Регистрация нового аккаунта на сервере с текущим (разблокированным) vault. Запуск fire-and-forget — прогресс/итог через [status]. */
+    fun register(serverUrl: String, accountId: String, masterPassword: CharArray) {
+        scope.launch { connect(serverUrl, accountId, masterPassword, registering = true) }
+    }
 
-    /** Вход в существующий аккаунт мастер-паролем. */
-    suspend fun login(serverUrl: String, accountId: String, masterPassword: CharArray) =
-        connect(serverUrl, accountId, masterPassword, registering = false)
+    /** Вход в существующий аккаунт мастер-паролем. Запуск fire-and-forget — прогресс/итог через [status]. */
+    fun login(serverUrl: String, accountId: String, masterPassword: CharArray) {
+        scope.launch { connect(serverUrl, accountId, masterPassword, registering = false) }
+    }
 
     private suspend fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, registering: Boolean) {
         _status.value = SyncStatus.Busy
@@ -113,10 +126,12 @@ class SyncCoordinator(
     }
 
     /** Прогнать один цикл синхронизации (pull/merge/push). No-op, если не подключены. */
-    suspend fun syncNow() {
+    fun syncNow() {
         if (client == null || session == null) return
-        _status.value = SyncStatus.Busy
-        runSync()
+        scope.launch {
+            _status.value = SyncStatus.Busy
+            runSync()
+        }
     }
 
     private suspend fun runSync() {
@@ -144,12 +159,14 @@ class SyncCoordinator(
     }
 
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */
-    suspend fun disconnect() {
-        client?.close()
-        client = null
-        session = null
-        configStore.clear()
-        _status.value = SyncStatus.Disabled
+    fun disconnect() {
+        scope.launch {
+            client?.close()
+            client = null
+            session = null
+            configStore.clear()
+            _status.value = SyncStatus.Disabled
+        }
     }
 
     private fun syncErrorMessage(e: SyncException): String = when (e.kind) {
@@ -157,8 +174,8 @@ class SyncCoordinator(
         SyncException.Kind.NOT_FOUND -> "Аккаунт не найден"
         SyncException.Kind.CONFLICT -> "Аккаунт уже существует"
         SyncException.Kind.GONE -> "Код паринга истёк"
-        SyncException.Kind.NETWORK -> "Нет связи с сервером"
-        SyncException.Kind.PROTOCOL -> "Ошибка протокола синхронизации"
+        SyncException.Kind.NETWORK -> "Нет связи с сервером: ${e.message}"
+        SyncException.Kind.PROTOCOL -> "Ошибка протокола синхронизации: ${e.message}"
     }
 }
 

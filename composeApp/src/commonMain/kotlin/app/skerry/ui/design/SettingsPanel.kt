@@ -24,7 +24,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
-import kotlinx.coroutines.launch
 
 /** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
 @Composable
@@ -384,10 +382,9 @@ private fun SyncSection(state: DesktopDesignState) {
     SettingToggleRow("Terminal history", "Off by default for privacy.", on = false, onToggle = {})
 }
 
-/** Живой статус sync: безусловные rememberCoroutineScope/collectAsState внутри своего composable. */
+/** Живой статус sync: безусловный collectAsState внутри своего composable (операции — на scope координатора). */
 @Composable
 private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
-    val scope = rememberCoroutineScope()
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> SyncStatusCard(
             "cloud_done", D.moss,
@@ -395,8 +392,8 @@ private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: Desk
             "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session",
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                GhostButton("Sync now", onClick = { scope.launch { sync.syncNow() } })
-                GhostButton("Disconnect", onClick = { scope.launch { sync.disconnect() } }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+                GhostButton("Sync now", onClick = { sync.syncNow() })
+                GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             }
         }
         SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.") {}
