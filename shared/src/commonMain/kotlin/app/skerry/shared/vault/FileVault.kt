@@ -142,6 +142,35 @@ class FileVault(
         records.toList()
     }
 
+    override fun syncMeta(): SyncMeta? = synchronized(lock) {
+        val m = meta ?: return@synchronized null // meta есть только на разблокированном vault
+        SyncMeta(m.salt.copyOf(), m.wrappedDataKey.copyOf()) // копии: вызывающий волен затирать
+    }
+
+    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = synchronized(lock) {
+        requireUnlocked()
+        val currentMeta = meta ?: error("unlocked vault has no metadata")
+        val working = records.toMutableList()
+        val applied = mutableListOf<VaultRecord>()
+        for (r in remote) {
+            val index = working.indexOfFirst { it.id == r.id }
+            val local = if (index >= 0) working[index] else null
+            // LWW: бóльшая version, при равенстве — лексикографически больший deviceId.
+            val wins = local == null ||
+                r.version > local.version ||
+                (r.version == local.version && r.deviceId > local.deviceId)
+            if (wins) {
+                if (index >= 0) working[index] = r else working += r
+                applied += r
+            }
+        }
+        if (applied.isNotEmpty()) {
+            writeFile(currentMeta, working) // упадёт — кеш не тронут (коммит после persist)
+            records.clear(); records.addAll(working)
+        }
+        applied
+    }
+
     override fun openPayload(id: String): ByteArray? = synchronized(lock) {
         val key = requireUnlocked()
         val record = records.firstOrNull { it.id == id } ?: return@synchronized null

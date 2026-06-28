@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+  Skerry Sync — админ-консоль (self-hosted). Статическая страница, отдаётся самим Ktor.
+  Zero-knowledge: показывает только агрегаты (счётчики), к содержимому доступа нет.
+  Палитра «night sea» — единый источник правды по токенам, см. CLAUDE.md.
+-->
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Skerry Sync — консоль</title>
+  <style>
+    :root {
+      --bg: #07141E; --panel: #0C1F2C; --line: #16313F;
+      --cyan: #2BBDEE; --amber: #F2A65A; --ok: #5DCE9E; --err: #E94B4B;
+      --text: #DCE7EE; --muted: #6E8595;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Space Grotesk", system-ui, sans-serif; }
+    header { padding: 24px 32px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 12px; }
+    header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+    header .dot.up { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    header h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: .3px; }
+    header .ver { color: var(--muted); font-size: 13px; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px; }
+    .auth { display: flex; gap: 10px; margin-bottom: 28px; }
+    input { flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+      padding: 12px 14px; border-radius: 10px; font-size: 14px; }
+    input:focus { outline: none; border-color: var(--cyan); }
+    button { background: var(--cyan); color: #04222E; border: none; padding: 12px 20px;
+      border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    button:hover { filter: brightness(1.08); }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+    .card .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .6px; }
+    .card .value { font-size: 34px; font-weight: 600; margin-top: 8px;
+      font-family: "JetBrains Mono", monospace; color: var(--cyan); }
+    .msg { margin-top: 18px; font-size: 13px; min-height: 18px; }
+    .msg.err { color: var(--err); }
+    .foot { margin-top: 32px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="health-dot"></span>
+    <h1>Skerry Sync</h1>
+    <span class="ver" id="ver"></span>
+  </header>
+  <main>
+    <div class="auth">
+      <input id="token" type="password" placeholder="Admin token (SKERRY_ADMIN_TOKEN)" autocomplete="off"/>
+      <button id="load">Обновить</button>
+    </div>
+    <div class="grid">
+      <div class="card"><div class="label">Аккаунты</div><div class="value" id="accounts">—</div></div>
+      <div class="card"><div class="label">Устройства</div><div class="value" id="devices">—</div></div>
+      <div class="card"><div class="label">Записи (шифроблобы)</div><div class="value" id="records">—</div></div>
+      <div class="card"><div class="label">Pairing-сессии</div><div class="value" id="pairing">—</div></div>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="foot">
+      Zero-knowledge: сервер хранит только шифротекст и метаданные синхронизации. Содержимое
+      записей, имена хостов, мастер-пароль и dataKey недоступны серверу и этой консоли.
+    </div>
+  </main>
+  <script>
+    async function health() {
+      try {
+        const r = await fetch('/admin/health');
+        const j = await r.json();
+        document.getElementById('health-dot').classList.toggle('up', j.status === 'ok');
+        document.getElementById('ver').textContent = 'v' + j.version;
+      } catch (e) { /* health недоступен — точка остаётся серой */ }
+    }
+    async function load() {
+      const token = document.getElementById('token').value.trim();
+      const msg = document.getElementById('msg');
+      msg.textContent = ''; msg.className = 'msg';
+      try {
+        const r = await fetch('/admin/stats', { headers: { 'X-Admin-Token': token } });
+        if (r.status === 401) { msg.textContent = 'Неверный admin-токен.'; msg.className = 'msg err'; return; }
+        const j = await r.json();
+        document.getElementById('accounts').textContent = j.accounts;
+        document.getElementById('devices').textContent = j.devices;
+        document.getElementById('records').textContent = j.records;
+        document.getElementById('pairing').textContent = j.pairingSessions;
+      } catch (e) { msg.textContent = 'Ошибка запроса: ' + e; msg.className = 'msg err'; }
+    }
+    document.getElementById('load').addEventListener('click', load);
+    document.getElementById('token').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+    health();
+  </script>
+</body>
+</html>

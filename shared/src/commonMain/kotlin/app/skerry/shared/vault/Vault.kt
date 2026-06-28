@@ -8,6 +8,14 @@ sealed interface UnlockResult {
 }
 
 /**
+ * Открытый материал аутентификации для self-hosted sync: соль деривации masterKey и обёртка
+ * dataKey. Не секреты по отдельности (соль публична, обёртка — шифротекст), но позволяют другому
+ * устройству по мастер-паролю вывести тот же masterKey и развернуть dataKey
+ * (`docs/skerry-sync-design.md` §1). Байты — копии; вызывающий волен их затирать.
+ */
+class SyncMeta internal constructor(val kdfSalt: ByteArray, val wrappedDataKey: ByteArray)
+
+/**
  * Локальное зашифрованное хранилище записей (хосты/ключи/identity). Иерархия ключей и формат
  * — `docs/skerry-sync-design.md` (Argon2id → masterKey → dataKey, XChaCha20-Poly1305), крипто
  * за [VaultCrypto]. В отличие от [app.skerry.shared.host.HostStore], у vault есть жизненный
@@ -74,6 +82,23 @@ interface Vault {
 
     /** Метаданные всех записей, включая tombstone (`deleted=true`); вызывающий фильтрует сам. */
     fun records(): List<VaultRecord>
+
+    /**
+     * Соль деривации masterKey и обёртка dataKey для аутентификации в sync. `null`, если vault
+     * заблокирован. Из них вызывающий (зная мастер-пароль) выводит authKey/SRP-верификатор и может
+     * развернуть dataKey на новом устройстве — см. [SyncMeta] и `docs/skerry-sync-design.md` §1.
+     */
+    fun syncMeta(): SyncMeta?
+
+    /**
+     * Слить пришедшие с sync записи по правилу LWW (`docs/skerry-sync-design.md` §3): для каждой
+     * принимается бóльшая по (`version`, затем лексикографически `deviceId`); иначе локальная
+     * остаётся. Записи кладутся **как есть** (blob/version/deviceId/deleted verbatim) — version не
+     * бампится, payload не перешифровывается, поэтому Lamport-счётчики остаются согласованы между
+     * устройствами. Требует разблокированного vault (нужны метаданные для атомарной записи).
+     * Возвращает применённые (победившие) записи.
+     */
+    fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord>
 
     /** Расшифрованный payload записи; `null` если записи нет, она удалена (tombstone) или blob не проходит AEAD. */
     fun openPayload(id: String): ByteArray?

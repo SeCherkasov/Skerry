@@ -6,6 +6,8 @@ import com.ionspin.kotlin.crypto.aead.AuthenticatedEncryptionWithAssociatedData
 import com.ionspin.kotlin.crypto.aead.crypto_aead_xchacha20poly1305_ietf_ABYTES
 import com.ionspin.kotlin.crypto.aead.crypto_aead_xchacha20poly1305_ietf_KEYBYTES
 import com.ionspin.kotlin.crypto.aead.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+import com.ionspin.kotlin.crypto.generichash.GenericHash
+import com.ionspin.kotlin.crypto.kdf.Kdf
 import com.ionspin.kotlin.crypto.pwhash.PasswordHash
 import com.ionspin.kotlin.crypto.pwhash.crypto_pwhash_SALTBYTES
 import com.ionspin.kotlin.crypto.pwhash.crypto_pwhash_argon2id_ALG_ARGON2ID13
@@ -49,6 +51,16 @@ class IonspinVaultCrypto : VaultCrypto {
         return LibsodiumRandom.buf(crypto_pwhash_SALTBYTES).toByteArray()
     }
 
+    override fun deriveSyncSalt(accountId: String): ByteArray {
+        requireInitialized()
+        // BLAKE2b(accountId) усечённый до длины Argon2id-соли — детерминированно и без коллизий
+        // на разумных accountId; одинаков на всех устройствах (design §1: «salt = accountId»).
+        return GenericHash.genericHash(
+            message = accountId.encodeToByteArray().toUByteArray(),
+            requestedHashLength = crypto_pwhash_SALTBYTES,
+        ).toByteArray()
+    }
+
     override fun deriveMasterKey(password: CharArray, salt: ByteArray): MasterKey {
         requireInitialized()
         require(salt.size == crypto_pwhash_SALTBYTES) { "salt must be $crypto_pwhash_SALTBYTES bytes" }
@@ -69,6 +81,15 @@ class IonspinVaultCrypto : VaultCrypto {
     override fun newDataKey(): DataKey {
         requireInitialized()
         return DataKey(AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfKeygen().toByteArray())
+    }
+
+    override fun deriveAuthKey(masterKey: MasterKey): ByteArray {
+        requireInitialized()
+        require(masterKey.bytes.size == KEY_BYTES) { "masterKey must be $KEY_BYTES bytes" }
+        // libsodium crypto_kdf (BLAKE2b): субключ из masterKey в домене AUTH_CONTEXT. Контекст
+        // отделяет authKey от любых других субключей того же masterKey (доменная изоляция).
+        return Kdf.deriveFromKey(AUTH_SUBKEY_ID, KEY_BYTES, AUTH_CONTEXT, masterKey.bytes.toUByteArray())
+            .toByteArray()
     }
 
     override fun wrapDataKey(masterKey: MasterKey, dataKey: DataKey): ByteArray =
@@ -138,5 +159,9 @@ class IonspinVaultCrypto : VaultCrypto {
         // Доменный AAD обёртки dataKey: отделяет её от записей (seal с AAD слота), чтобы
         // обёртку нельзя было подставить как запись и наоборот даже при совпадении ключей.
         val WRAP_AAD = "skerry.vault.wrapped-data-key.v1".encodeToByteArray()
+
+        // Деривация authKey: контекст ровно 8 байт (crypto_kdf_CONTEXTBYTES), субключ №1.
+        const val AUTH_CONTEXT = "skerryau" // 8 ASCII-символов
+        const val AUTH_SUBKEY_ID = 1u
     }
 }

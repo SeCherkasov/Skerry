@@ -32,7 +32,14 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-include(":shared")
-include(":composeApp")
-include(":androidApp")
+// serverOnly: собрать только sync-сервер (Ktor/JVM) без Android-модулей — для Docker-образа,
+// где нет Android SDK. Включается `-PserverOnly` или env SKERRY_SERVER_ONLY=1.
+val serverOnly = providers.gradleProperty("serverOnly").isPresent ||
+    System.getenv("SKERRY_SERVER_ONLY") == "1"
+
 include(":server")
+if (!serverOnly) {
+    include(":shared")
+    include(":composeApp")
+    include(":androidApp")
+}

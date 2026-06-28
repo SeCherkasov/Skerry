@@ -42,6 +42,14 @@ interface VaultCrypto {
     fun newSalt(): ByteArray
 
     /**
+     * Детерминированная соль деривации masterKey для self-hosted sync — выводится из [accountId]
+     * (`docs/skerry-sync-design.md` §1: «salt = accountId»). Одинакова на всех устройствах, не
+     * секрет; позволяет новому устройству вывести тот же masterKey из одного мастер-пароля и
+     * развернуть серверную обёртку dataKey, не получая соль с сервера. Длина = длине [newSalt].
+     */
+    fun deriveSyncSalt(accountId: String): ByteArray
+
+    /**
      * Argon2id(password, salt) → [MasterKey]. Намеренно дорогая операция (десятки мс и выше);
      * детерминирована по паре (password, salt). Вызывающая сторона отвечает за затирание
      * [password] после вызова.
@@ -50,6 +58,14 @@ interface VaultCrypto {
 
     /** Новый случайный [DataKey] — создаётся один раз при инициализации vault. */
     fun newDataKey(): DataKey
+
+    /**
+     * Детерминированно выводит 256-битный authKey из [masterKey] для аутентификации в self-hosted
+     * sync (`docs/skerry-sync-design.md` §1: HKDF-ветка masterKey → authKey → SRP-верификатор).
+     * Отдельный домен деривации, не пересекающийся с обёрткой dataKey; сервер authKey не видит —
+     * на него уходит лишь SRP-верификатор. Детерминирована по [masterKey].
+     */
+    fun deriveAuthKey(masterKey: MasterKey): ByteArray
 
     /** Обернуть [dataKey] мастер-ключом для хранения на диске/сервере (видит только шифротекст). */
     fun wrapDataKey(masterKey: MasterKey, dataKey: DataKey): ByteArray

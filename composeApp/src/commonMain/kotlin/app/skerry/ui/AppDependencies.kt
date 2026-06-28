@@ -9,6 +9,7 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
 
 /**
@@ -38,4 +39,6 @@ data class AppDependencies(
     val snippets: SnippetManager? = null,
     /** Биометрическая разблокировка vault; `null` — платформа без биометрии (desktop MVP). */
     val biometrics: VaultBiometrics? = null,
+    /** Координатор self-hosted синхронизации (Phase 2); `null` — sync не подключён на платформе. */
+    val sync: SyncCoordinator? = null,
 )

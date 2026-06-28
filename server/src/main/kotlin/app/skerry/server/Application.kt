@@ -1,25 +1,56 @@
 package app.skerry.server
 
+import app.skerry.server.config.ServerConfig
+import app.skerry.server.db.Db
 import io.ktor.server.application.Application
+import io.ktor.server.application.log
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
-import io.ktor.server.routing.routing
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
- * Self-hosted sync-сервер Skerry (Phase 2). Пока только каркас с health-check;
- * REST/WS API и модель VaultRecord — `docs/skerry-sync-design.md`.
+ * Self-hosted sync-сервер Skerry (Phase 2, AGPL-3.0). Zero-knowledge: хранит только шифроблобы
+ * и метаданные синхронизации; протокол и модель угроз — `docs/skerry-sync-design.md`.
+ * Конфигурация — переменные окружения (см. [ServerConfig], `.env.example`).
  */
 fun main() {
-    embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module)
-        .start(wait = true)
+    val config = ServerConfig.fromEnv()
+    embeddedServer(Netty, port = config.port, host = config.host) {
+        module(config)
+    }.start(wait = true)
 }
 
-fun Application.module() {
-    routing {
-        get("/healthz") {
-            call.respondText("ok")
+/** Точка входа Ktor: проверяет конфиг, подключает БД, собирает сервер, запускает уборку. */
+fun Application.module(config: ServerConfig = ServerConfig.fromEnv()) {
+    guardConfig(config)
+    val database = Db.connect(config)
+    val services = Services(config, database)
+    configureServer(services)
+    scheduleCleanup(services)
+}
+
+/**
+ * Fail-fast при заведомо небезопасной конфигурации: дефолтный JWT-секрет в открытом коде
+ * позволил бы подделать токен любого аккаунта. В проде запуск с ним запрещён; для локальной
+ * разработки разблокируется явным `SKERRY_DEV=1` (security-ревью H1).
+ */
+private fun guardConfig(config: ServerConfig, env: Map<String, String> = System.getenv()) {
+    if (config.usesDefaultJwtSecret && env["SKERRY_DEV"] != "1") {
+        error(
+            "SKERRY_JWT_SECRET не задан (используется небезопасный дефолт). Задайте устойчивый " +
+                "секрет (openssl rand -base64 48) либо SKERRY_DEV=1 для локальной разработки.",
+        )
+    }
+}
+
+/** Периодически чистит истёкшие pairing-сессии, чтобы capability-коды не копились на диске. */
+private fun Application.scheduleCleanup(services: Services) {
+    launch {
+        while (true) {
+            delay(15 * 60 * 1000L)
+            runCatching { services.pairing.cleanupExpired() }
+                .onFailure { log.warn("pairing cleanup failed", it) }
         }
     }
 }

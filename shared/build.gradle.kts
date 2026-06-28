@@ -63,6 +63,15 @@ kotlin {
                 // Явно: транзитивный bcprov sshj не виден на compile classpath, а SshjTransport
                 // ссылается на BouncyCastleProvider для подмены урезанного системного «BC» на Android.
                 implementation(libs.bouncycastle.prov)
+                // Sync-клиент (Phase 2): HTTP+WS к self-hosted серверу. iOS отложен — клиент
+                // живёт в общем JVM-узле (desktop + Android), как и sshj-транспорт.
+                implementation(libs.ktor.client.core)
+                implementation(libs.ktor.client.cio)
+                implementation(libs.ktor.client.content.negotiation)
+                implementation(libs.ktor.client.websockets)
+                implementation(libs.ktor.serialization.kotlinx.json)
+                // SRP-6a клиентская сторона (verifier-генератор + клиентский обмен).
+                implementation(libs.nimbus.srp)
             }
         }
         androidMain.dependencies {
@@ -74,6 +83,13 @@ kotlin {
                 implementation(libs.sshd.core)
                 // SFTP-подсистема встроенного сервера для интеграционных тестов SshjSftpClient
                 implementation(libs.sshd.sftp)
+                // e2e sync: реальный self-hosted сервер поднимается в тесте, клиент ходит к нему
+                // по настоящему HTTP — доказательство zero-knowledge round-trip.
+                implementation(project(":server"))
+                // Движок Netty + ktor core нужны тесту, чтобы поднять embeddedServer (у :server
+                // это implementation-зависимости и в тест транзитивно не приходят).
+                implementation(libs.ktor.server.core)
+                implementation(libs.ktor.server.netty)
             }
         }
     }

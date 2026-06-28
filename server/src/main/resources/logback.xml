@@ -1,0 +1,16 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!-- Шумные библиотеки приглушены: на INFO лог чист для оператора self-host. -->
+    <logger name="com.zaxxer.hikari" level="WARN"/>
+    <logger name="Exposed" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+</configuration>

@@ -25,3 +25,7 @@ Thumbs.db
 # Логи и временные файлы
 *.log
 *.hprof
+
+# Локальные SQLite-файлы sync-сервера
+*.db
+*.db-journal

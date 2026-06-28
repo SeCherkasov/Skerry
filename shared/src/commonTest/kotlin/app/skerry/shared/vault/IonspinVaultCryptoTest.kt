@@ -32,6 +32,27 @@ class IonspinVaultCryptoTest {
     }
 
     @Test
+    fun `deriveAuthKey is deterministic per masterKey and 32 bytes`() = cryptoTest {
+        val salt = crypto.newSalt()
+        val mk1 = crypto.deriveMasterKey("pw".toCharArray(), salt)
+        val mk2 = crypto.deriveMasterKey("pw".toCharArray(), salt) // тот же пароль+соль ⇒ тот же masterKey
+
+        val auth1 = crypto.deriveAuthKey(mk1)
+        val auth2 = crypto.deriveAuthKey(mk2)
+
+        assertEquals(32, auth1.size)
+        assertContentEquals(auth1, auth2) // детерминированность
+
+        // другой masterKey ⇒ другой authKey
+        val mkOther = crypto.deriveMasterKey("pw".toCharArray(), crypto.newSalt())
+        assertFalse(crypto.deriveAuthKey(mkOther).contentEquals(auth1))
+
+        // authKey доменно отделён от обёртки dataKey: не равен ей побайтно
+        val dataKey = crypto.newDataKey()
+        assertFalse(crypto.wrapDataKey(mk1, dataKey).contentEquals(auth1))
+    }
+
+    @Test
     fun `seal then open round-trips the plaintext`() = cryptoTest {
         val key = crypto.newDataKey()
         val message = "192.168.1.45 root".encodeToByteArray()
