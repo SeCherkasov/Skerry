@@ -440,7 +440,8 @@ private fun MobileLinkedDevices(sync: SyncCoordinator) {
     var reload by remember { mutableStateOf(0) }
     LaunchedEffect(sync, reload) {
         loading = true
-        devices = sync.listDevices()
+        // Отозванные устройства больше не привязаны — не показываем (сервер хранит строку с revoked=true).
+        devices = sync.listDevices().filter { !it.revoked }
         loading = false
     }
 

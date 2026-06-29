@@ -71,8 +71,9 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
 import androidx.compose.runtime.collectAsState
-import app.skerry.ui.sync.ServerReachable
 import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.sync.SyncIndicatorLevel
+import app.skerry.ui.sync.syncIndicator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
@@ -804,15 +805,20 @@ private fun StatusBar() {
             StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Доступность sync-сервера по health-пингу (см. SyncCoordinator.serverReachable). Прячем,
-            // когда sync не настроен (UNKNOWN) — индикатор только для тех, кто им пользуется.
-            val reach = LocalSync.current?.serverReachable?.collectAsState()?.value
-            if (reach != null && reach != ServerReachable.UNKNOWN) {
-                val up = reach == ServerReachable.REACHABLE
+            // Индикатор sync ведёт по статусу сессии (см. syncIndicator): «Sync online» только при
+            // активной сессии + доступном сервере; привязано-но-не-подключено → «Sync paused», и т.д.
+            // Прячем, когда sync не настроен / ещё не пинговали.
+            val syncC = LocalSync.current
+            val ind = syncC?.let { syncIndicator(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
+            if (ind != null) {
                 StatusItem(
-                    if (up) "cloud_done" else "cloud_off",
-                    if (up) "Sync online" else "Sync offline",
-                    color = if (up) D.moss else D.sunset,
+                    ind.icon,
+                    ind.label,
+                    color = when (ind.level) {
+                        SyncIndicatorLevel.OK -> D.moss
+                        SyncIndicatorLevel.WARN -> D.amber
+                        SyncIndicatorLevel.ERROR -> D.sunset
+                    },
                     mono = mono,
                 )
             }

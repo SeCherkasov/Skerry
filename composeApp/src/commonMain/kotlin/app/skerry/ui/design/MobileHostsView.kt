@@ -7,7 +7,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.collectAsState
-import app.skerry.ui.sync.ServerReachable
+import app.skerry.ui.sync.SyncIndicatorLevel
+import app.skerry.ui.sync.syncIndicator
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -208,11 +209,16 @@ private fun HostsHeader(onAvatar: () -> Unit) {
     ) {
         Txt("Hosts", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Доступность sync-сервера по health-пингу; прячем, когда sync не настроен (UNKNOWN).
-            val reach = LocalSync.current?.serverReachable?.collectAsState()?.value
-            if (reach != null && reach != ServerReachable.UNKNOWN) {
-                val up = reach == ServerReachable.REACHABLE
-                Sym(if (up) "cloud_done" else "cloud_off", size = 19.sp, color = if (up) D.moss else D.sunset)
+            // Индикатор sync по статусу сессии (см. syncIndicator), не только по доступности сервера:
+            // «paused/error» при отсутствии рабочей сессии, а не ложно-зелёный online.
+            val syncC = LocalSync.current
+            val ind = syncC?.let { syncIndicator(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
+            if (ind != null) {
+                Sym(ind.icon, size = 19.sp, color = when (ind.level) {
+                    SyncIndicatorLevel.OK -> D.moss
+                    SyncIndicatorLevel.WARN -> D.amber
+                    SyncIndicatorLevel.ERROR -> D.sunset
+                })
             }
             Box(
                 Modifier.size(34.dp).clip(CircleShape).background(D.cyan).clickable(onClick = onAvatar),
