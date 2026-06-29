@@ -24,6 +24,14 @@ data class SyncSetupForm(
     fun canSubmit(passwordLength: Int): Boolean =
         passwordLength > 0 && normalizedAccountId.isNotEmpty() && isHttpUrl(normalizedServerUrl)
 
+    /**
+     * Адрес сервера задан по незашифрованному `http://`. Отправку НЕ блокируем — это рабочий режим
+     * для локального теста/LAN без реверс-прокси с TLS. Но по `http` SRP-взаимная аутентификация и
+     * токены сессии беззащитны перед MITM (security-ревью, HIGH), поэтому UI обязан показать явное
+     * предупреждение, когда это свойство `true`.
+     */
+    val isInsecureUrl: Boolean get() = normalizedServerUrl.startsWith("http://")
+
     private fun isHttpUrl(url: String): Boolean =
         (url.startsWith("http://") || url.startsWith("https://")) && url.length > "https://".length
 }

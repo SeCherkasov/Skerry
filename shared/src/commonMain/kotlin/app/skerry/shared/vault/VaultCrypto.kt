@@ -8,6 +8,14 @@ package app.skerry.shared.vault
  * не печатает содержимое.
  */
 class MasterKey internal constructor(internal val bytes: ByteArray) {
+    /**
+     * Затереть ключевой материал (`bytes.fill(0)`). Вызывать, как только masterKey больше не нужен:
+     * это выход Argon2id, держать его в heap дольше необходимого незачем (heap-дамп/своп раскрыл бы
+     * ключ). Код `shared` затирает свои masterKey сам; этот публичный метод нужен вызывающим за
+     * пределами модуля (напр. `SyncCoordinator`), которым `bytes` недоступны. Идемпотентно.
+     */
+    fun zeroize() { bytes.fill(0) }
+
     override fun toString(): String = "MasterKey(redacted)"
 }
 
@@ -17,6 +25,13 @@ class MasterKey internal constructor(internal val bytes: ByteArray) {
  * ключ, не перешифровывая записи — см. `docs/skerry-sync-design.md` §1.
  */
 class DataKey internal constructor(internal val bytes: ByteArray) {
+    /**
+     * Затереть ключевой материал **копии** dataKey (например полученной из [Vault.exportDataKey] или
+     * [VaultCrypto.unwrapDataKey]). НЕ вызывать на ключе, которым ещё владеет живой vault — затрёшь
+     * рабочий ключ. Для копий, время жизни которых вызывающий контролирует сам. Идемпотентно.
+     */
+    fun zeroize() { bytes.fill(0) }
+
     override fun toString(): String = "DataKey(redacted)"
 }
 

@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.random.Random
 
 /** Где приложение хранит настройку sync (URL сервера, accountId, deviceId) между запусками. */
 interface SyncConfigStore {
@@ -82,7 +81,7 @@ class SyncCoordinator(
     private val vault: Vault,
     private val configStore: SyncConfigStore = InMemorySyncConfigStore(),
     private val syncState: SyncStateStore = InMemorySyncStateStore(),
-    private val deviceIdProvider: () -> String = { randomDeviceId() },
+    private val deviceIdProvider: () -> String = { randomDeviceId(crypto) },
     private val deviceName: String = "Skerry device",
     /**
      * Вызывается, когда при входе принят ОТЛИЧНЫЙ от локального ключ аккаунта ([Vault.adoptDataKey]
@@ -171,11 +170,15 @@ class SyncCoordinator(
             masterPassword.fill(' ')
             return
         }
+        // Ключевой материал держим во внешних переменных, чтобы затереть его в finally (zero-knowledge:
+        // masterKey — выход Argon2id, authKey — SRP-материал; держать их в heap до GC незачем).
+        var masterKey: MasterKey? = null
+        var authKey: ByteArray? = null
         try {
             // Argon2id внутри try: тяжёлый и может бросить (вплоть до OutOfMemoryError) — иначе пароль
             // не затёрся бы (finally) и статус навсегда застрял бы на Busy.
-            val masterKey = crypto.deriveMasterKey(masterPassword, crypto.deriveSyncSalt(accountId))
-            val authKey = crypto.deriveAuthKey(masterKey)
+            val mk = crypto.deriveMasterKey(masterPassword, crypto.deriveSyncSalt(accountId)).also { masterKey = it }
+            val ak = crypto.deriveAuthKey(mk).also { authKey = it }
             val deviceId = configStore.load()?.takeIf { it.accountId == accountId }?.deviceId ?: deviceIdProvider()
             val device = DeviceInfo(deviceId, deviceName, platformName)
             val syncClient = clientFactory(serverUrl)
@@ -183,11 +186,11 @@ class SyncCoordinator(
             // Register-or-login: новый аккаунт публикует наш dataKey; существующий — входим и
             // принимаем его dataKey, иначе чужие записи не расшифруются. CONFLICT = аккаунт уже есть.
             val newSession = try {
-                syncClient.register(accountId, authKey, crypto.wrapDataKey(masterKey, dataKey), device)
+                syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
             } catch (e: SyncException) {
                 if (e.kind != SyncException.Kind.CONFLICT) throw e
-                val s = syncClient.login(accountId, authKey, device)
-                adoptAccountDataKey(syncClient, s, masterKey, masterPassword.copyOf())
+                val s = syncClient.login(accountId, ak, device)
+                adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
                 s
             }
 
@@ -201,7 +204,9 @@ class SyncCoordinator(
             syncState.setCursor(accountId, 0)
             // keep-connected: запечатываем refresh-токен под АКТУАЛЬНЫМ dataKey vault (после возможного
             // принятия ключа аккаунта он мог смениться) — иначе restoreSession не сможет его открыть.
-            val sealed = if (keepConnected) vault.exportDataKey()?.let { sealToken(it, newSession.refreshToken) } else null
+            val sealed = if (keepConnected) {
+                vault.exportDataKey()?.let { dk -> try { sealToken(dk, newSession.refreshToken) } finally { dk.zeroize() } }
+            } else null
             configStore.save(SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed))
             runSync()
         } catch (e: CancellationException) {
@@ -213,9 +218,12 @@ class SyncCoordinator(
             // исключение ушло бы в SupervisorJob тихо, а статус навсегда застрял бы на Busy.
             _status.value = SyncStatus.Failed("Не удалось подключиться: ${e.message}")
         } finally {
-            // Затирание байтов masterKey/dataKey — ответственность кода shared (их `bytes` internal);
-            // здесь лишь не удерживаем ссылки дольше необходимого и чистим сам пароль.
+            // Затираем весь выведенный ключевой материал и пароль (zero-knowledge): masterKey/authKey —
+            // субключи, dataKey — копия из exportDataKey (живой ключ остаётся у vault). Идемпотентно.
             masterPassword.fill(' ')
+            masterKey?.zeroize()
+            authKey?.fill(0)
+            dataKey.zeroize()
         }
     }
 
@@ -264,8 +272,14 @@ class SyncCoordinator(
             _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
             // Подтянули записи с сервера → обновить менеджеры списков, иначе синканутое не видно до перезахода.
             if (outcome.pulled > 0) runCatching { onSynced() }
+        } catch (e: CancellationException) {
+            throw e // отмену не глушим — иначе порвём structured concurrency
         } catch (e: SyncException) {
             _status.value = SyncStatus.Failed(syncErrorMessage(e))
+        } catch (e: Exception) {
+            // Непредвиденное (сериализация, OOM, баг в движке) — иначе ушло бы в SupervisorJob тихо,
+            // а статус навсегда застрял бы на Busy (вечный спиннер). syncNow/restoreSession зовут это.
+            _status.value = SyncStatus.Failed("Ошибка синхронизации: ${e.message}")
         }
     }
 
@@ -285,7 +299,9 @@ class SyncCoordinator(
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */
     fun disconnect() {
         scope.launch {
-            client?.close()
+            // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
+            // иначе disconnect молча провалился бы, а статус застрял.
+            runCatching { client?.close() }
             client = null
             session = null
             // Курсор синка тоже забываем: следующее подключение (к этому или другому аккаунту в том же
@@ -322,8 +338,15 @@ class SyncCoordinator(
                 // refresh ротирует токен — пересохраняем запечатанным под dataKey.
                 configStore.save(cfg.copy(sealedRefreshToken = sealToken(dataKey, newSession.refreshToken)))
                 runSync()
-            } catch (e: SyncException) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Любой сбой восстановления (протух токен, нет связи, иное) — откат в Configured, привязку
+                // не стираем (переподключение паролем). Ловим Exception, не только SyncException: иначе
+                // непредвиденное застряло бы на Busy (вечный спиннер).
                 _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+            } finally {
+                dataKey.zeroize() // копия dataKey — затираем, живой ключ остаётся у vault
             }
         }
     }
@@ -350,6 +373,10 @@ class SyncCoordinator(
     }
 }
 
-/** Случайный 128-битный deviceId как hex — без платформенных API (общий commonMain). */
-private fun randomDeviceId(): String =
-    (0 until 16).joinToString("") { "0123456789abcdef"[Random.nextInt(16)].toString() }
+/**
+ * Криптослучайный 128-битный deviceId как hex. Берём 16 байт из CSPRNG libsodium через
+ * [VaultCrypto.newSalt] (а не `kotlin.random.Random`, не криптостойкий): deviceId не секрет, но
+ * входит в alias биометрического ключа и в LWW-tie-break, поэтому предсказуемость нежелательна.
+ */
+private fun randomDeviceId(crypto: VaultCrypto): String =
+    crypto.newSalt().joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }

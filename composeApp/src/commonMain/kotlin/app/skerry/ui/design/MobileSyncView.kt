@@ -353,6 +353,14 @@ private fun SyncSetupBody(
         }
     }
 
+    // http:// разрешён (локальный тест/LAN без TLS-прокси), но беззащитен перед MITM — предупреждаем явно.
+    if (form.isInsecureUrl) {
+        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sym("warning", size = 14.sp, color = D.sunset)
+            Txt("Plain http:// — not encrypted in transit. Use https:// for anything but local testing.", color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+        }
+    }
+
     if (errorMessage != null) {
         Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("error", size = 14.sp, color = D.sunset)

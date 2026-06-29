@@ -46,4 +46,19 @@ class SyncSetupFormTest {
         assertTrue(SyncSetupForm("http://localhost:8443", "maya").canSubmit(8))
         assertTrue(SyncSetupForm("https://localhost:8443", "maya").canSubmit(8))
     }
+
+    @Test
+    fun http_flagged_insecure_but_still_submittable() {
+        // http:// разрешён для локального теста (без TLS-прокси), но помечается небезопасным — UI предупреждает.
+        val http = SyncSetupForm("http://localhost:8443", "maya")
+        assertTrue(http.isInsecureUrl)
+        assertTrue(http.canSubmit(8))
+    }
+
+    @Test
+    fun https_not_flagged_insecure() {
+        assertFalse(SyncSetupForm("https://sync.skerry.dev", "maya").isInsecureUrl)
+        // Хвостовые пробелы не должны прятать http:// от проверки (нормализуем перед сверкой схемы).
+        assertTrue(SyncSetupForm("  http://box.lan  ", "maya").isInsecureUrl)
+    }
 }

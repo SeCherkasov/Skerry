@@ -66,9 +66,11 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length) && status != SyncStatus.Busy
 
-    // Успешное подключение закрывает модалку; пароль обнуляем независимо от исхода.
+    // Закрываемся только если ИМЕННО этот диалог инициировал подключение и оно дошло до Online —
+    // иначе диалог, случайно открытый при уже активной сессии, схлопнулся бы на первой композиции.
+    var connecting by remember { mutableStateOf(false) }
     LaunchedEffect(status) {
-        if (status is SyncStatus.Online) {
+        if (connecting && status is SyncStatus.Online) {
             password = ""
             onDismiss()
         }
@@ -76,6 +78,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
 
     val submit = submit@{
         if (!canSubmit) return@submit
+        connecting = true
         val pw = password.toCharArray() // координатор затрёт массив
         password = ""
         val url = form.normalizedServerUrl
@@ -117,6 +120,14 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
             SyncField("master password", password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
 
             KeepConnectedRow(keepConnected) { keepConnected = it }
+
+            // http:// разрешён (локальный тест/LAN без TLS-прокси), но беззащитен перед MITM — предупреждаем явно.
+            if (form.isInsecureUrl) {
+                Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Sym("warning", size = 14.sp, color = D.sunset)
+                    Txt("Plain http:// — not encrypted in transit. Use https:// for anything but local testing.", color = D.sunset, size = 11.sp, lineHeight = 15.sp)
+                }
+            }
 
             val failed = status as? SyncStatus.Failed
             if (failed != null) {
