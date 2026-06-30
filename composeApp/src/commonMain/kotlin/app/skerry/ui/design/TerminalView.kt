@@ -128,7 +128,7 @@ fun TerminalView(state: DesktopDesignState) {
             }
                 // Строка риска (Warn/Danger) поверх низа терминала — только для рискованной команды
                 // (≤1 строка). Безопасные (None) не перекрывают ничего. Сама команда — в строке ниже.
-                aiController?.let { AiRiskOverlay(it, Modifier.align(Alignment.BottomStart)) }
+                aiController?.let { AiInfoOverlay(it, Modifier.align(Alignment.BottomStart)) }
             }
             // Всегда-присутствующая строка бара: команда/Thinking/blocked/error показываются ВНУТРИ неё
             // (нулевое изменение высоты → нет дёрга). Off/мок без контроллера → прежний слот.
@@ -1314,19 +1314,22 @@ private fun TerminalAiBarSlot() {
 }
 
 /**
- * Тонкая строка-предупреждение о риске команды ([CommandRisk.Warn]/[Danger]) — рисуется ОВЕРЛЕЕМ поверх
- * низа терминала (см. [TerminalView]), поэтому не ресайзит терминал (нет reflow-«дёрга»). Перекрывает
- * ≤1 строку и ТОЛЬКО для рискованной команды; безопасные (None) ничего не перекрывают. Сама команда
- * показывается в строке бара ([AiBarInput]), не здесь.
+ * Тонкая строка над баром: краткое пояснение к команде (None → что она делает, [TerminalAiController.pendingInfo])
+ * или предупреждение о риске ([CommandRisk.Warn] — янтарь/«warning», [Danger] — красный/«block» — запрещающий
+ * знак). Рисуется ОВЕРЛЕЕМ поверх низа терминала (см. [TerminalView]) — не ресайзит терминал (нет «дёрга»),
+ * перекрывает ≤1 строку. Для None без пояснения — не показывается (ничего не перекрывает).
  */
 @Composable
-private fun AiRiskOverlay(controller: TerminalAiController, modifier: Modifier) {
-    val assessment = controller.pendingRisk ?: return
-    if (controller.pending == null || assessment.risk == CommandRisk.None) return
-    val color = if (assessment.risk == CommandRisk.Danger) D.sunset else D.amber
+private fun AiInfoOverlay(controller: TerminalAiController, modifier: Modifier) {
+    if (controller.pending == null) return
+    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+    val (icon, color, text) = when (risk) {
+        CommandRisk.Danger -> Triple("block", D.sunset, controller.pendingRisk?.reason ?: "Destructive command — review carefully.")
+        CommandRisk.Warn -> Triple("warning", D.amber, controller.pendingRisk?.reason ?: "Use with care.")
+        CommandRisk.None -> Triple("lightbulb", D.cyan, controller.pendingInfo ?: return)
+    }
     Column(modifier.fillMaxWidth().background(D.surface2)) {
-        AiStatusRow("warning", assessment.reason ?: "Potentially destructive command — review before running.",
-            color, LocalFonts.current.mono)
+        AiStatusRow(icon, text, color, LocalFonts.current.mono)
     }
 }
 
@@ -1359,12 +1362,15 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             val leadColor = if (pending != null) accent else D.amber
+            // Для деструктивной команды — запрещающий знак «block» вместо иконки терминала.
+            val leadIcon = if (pending != null) (if (danger) "block" else "terminal") else "auto_awesome"
             Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(leadColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Sym(if (pending != null) "terminal" else "auto_awesome", size = 16.sp, color = leadColor)
+                Sym(leadIcon, size = 16.sp, color = leadColor)
             }
             Box(Modifier.weight(1f)) {
                 when {
-                    pending != null -> Txt(pending, color = D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // Деструктивную команду подсвечиваем красным.
+                    pending != null -> Txt(pending, color = if (danger) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
                     controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -54,6 +54,9 @@ class TerminalAiController(
      */
     var pendingRisk by mutableStateOf<CommandAssessment?>(null); private set
 
+    /** Краткое пояснение, что делает [pending] (вторая строка ответа модели); `null` — нет. */
+    var pendingInfo by mutableStateOf<String?>(null); private set
+
     /** Частичный ответ во время генерации; `null` — генерации нет. */
     var streaming by mutableStateOf<String?>(null); private set
     var busy by mutableStateOf(false); private set
@@ -72,6 +75,7 @@ class TerminalAiController(
         blocked = null
         pending = null
         pendingRisk = null
+        pendingInfo = null
         val current = settings()
         if (!current.isConfigured) {
             blocked = NOT_CONFIGURED
@@ -105,6 +109,7 @@ class TerminalAiController(
                     else -> {
                         pending = command
                         pendingRisk = CommandRiskClassifier.assess(command)
+                        pendingInfo = extractDescription(sb.toString())
                     }
                 }
             } catch (e: CancellationException) {
@@ -130,6 +135,7 @@ class TerminalAiController(
         val command = pending
         pending = null
         pendingRisk = null
+        pendingInfo = null
         return command
     }
 
@@ -161,10 +167,23 @@ class TerminalAiController(
         return cleaned.ifEmpty { null }
     }
 
+    /**
+     * Вторая непустая строка ответа модели — краткое пояснение, что делает команда (по [COMMAND_PROMPT]).
+     * Снимаем маркеры списков/`#`/бэктики, режем до 120 символов. `null` — пояснения нет.
+     */
+    private fun extractDescription(raw: String): String? {
+        val lines = raw.trim().lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        val desc = lines.getOrNull(1) ?: return null
+        val cleaned = desc.trimStart('#', '-', '*', '•', '>').trim().trim('`').trim()
+            .filter { it == '\t' || it.code >= 0x20 }.trim()
+        return cleaned.ifEmpty { null }?.take(120)
+    }
+
     /** Отклонить предложение/сбросить сообщения. */
     fun dismiss() {
         pending = null
         pendingRisk = null
+        pendingInfo = null
         error = null
         blocked = null
     }
@@ -190,8 +209,9 @@ class TerminalAiController(
 
         const val COMMAND_PROMPT =
             "You translate the user's request into a SINGLE shell command for a POSIX/Linux SSH session. " +
-                "Output ONLY the command — no explanation, no markdown, no backticks. If the request is " +
-                "unsafe or impossible, output a single line starting with '#' explaining why. Never invent " +
-                "credentials or hostnames."
+                "Output the command on the FIRST line — only the command, no markdown, no backticks. " +
+                "On the SECOND line, add a very short (max 8 words) plain-English description of what it does. " +
+                "If the request is unsafe or impossible, output a single line starting with '#' explaining why. " +
+                "Never invent credentials or hostnames."
     }
 }

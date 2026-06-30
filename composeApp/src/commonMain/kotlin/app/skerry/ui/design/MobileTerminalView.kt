@@ -148,7 +148,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeTransform = imeTransform,
                         )
                         // Только тонкая строка риска (для Warn/Danger) оверлеем; команда — в строке ниже.
-                        aiController?.let { MobileAiRiskOverlay(it, Modifier.align(Alignment.BottomStart)) }
+                        aiController?.let { MobileAiInfoOverlay(it, Modifier.align(Alignment.BottomStart)) }
                     }
                     // Всегда-присутствующая строка бара — команда/статус внутри неё (нет «дёрга»).
                     if (aiController != null) MobileAiBarInput(aiController, st.terminal)
@@ -173,16 +173,20 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 }
 
 /**
- * Тонкая строка-предупреждение о риске ([CommandRisk.Warn]/[Danger]) — ОВЕРЛЕЕМ поверх низа терминала,
- * не ресайзит терминал (нет «дёрга»); перекрывает ≤1 строку и только для рискованной команды.
+ * Тонкая строка над баром: пояснение к команде (None → что делает) или предупреждение о риске
+ * (Warn — янтарь, Danger — красный/«block»). ОВЕРЛЕЕМ поверх низа терминала (нет «дёрга»), ≤1 строка.
  */
 @Composable
-private fun MobileAiRiskOverlay(controller: TerminalAiController, modifier: Modifier) {
-    val assessment = controller.pendingRisk ?: return
-    if (controller.pending == null || assessment.risk == CommandRisk.None) return
-    val color = if (assessment.risk == CommandRisk.Danger) D.sunset else D.amber
+private fun MobileAiInfoOverlay(controller: TerminalAiController, modifier: Modifier) {
+    if (controller.pending == null) return
+    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+    val (icon, color, text) = when (risk) {
+        CommandRisk.Danger -> Triple("block", D.sunset, controller.pendingRisk?.reason ?: "Destructive command — review carefully.")
+        CommandRisk.Warn -> Triple("warning", D.amber, controller.pendingRisk?.reason ?: "Use with care.")
+        CommandRisk.None -> Triple("lightbulb", D.cyan, controller.pendingInfo ?: return)
+    }
     Column(modifier.fillMaxWidth().background(D.surface2)) {
-        MobileAiStatus("warning", assessment.reason ?: "Potentially destructive command.", color, LocalFonts.current.mono)
+        MobileAiStatus(icon, text, color, LocalFonts.current.mono)
     }
 }
 
@@ -210,10 +214,13 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Sym(if (pending != null) "terminal" else "auto_awesome", size = 16.sp, color = if (pending != null) accent else D.amber)
+            Sym(
+                if (pending != null) (if (danger) "block" else "terminal") else "auto_awesome",
+                size = 16.sp, color = if (pending != null) accent else D.amber,
+            )
             Box(Modifier.weight(1f)) {
                 when {
-                    pending != null -> Txt(pending, color = D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    pending != null -> Txt(pending, color = if (danger) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
                     controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
