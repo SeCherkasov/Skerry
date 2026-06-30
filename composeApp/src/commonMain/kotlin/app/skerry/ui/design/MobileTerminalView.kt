@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiPolicyDecision
@@ -182,7 +183,7 @@ private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: T
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Sym("terminal", size = 14.sp, color = D.moss)
-                Txt(cmd, color = D.text, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+                Txt(cmd, color = D.text, size = 12.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 MobileAiChip("Run", D.moss) { controller.confirm()?.let { terminal.send(it + "\r") } }
                 MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
             }
@@ -229,7 +230,7 @@ private fun MobileAiStatus(icon: String, text: String, color: Color, mono: FontF
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Sym(icon, size = 13.sp, color = color)
-        Txt(text, color = color, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+        Txt(text, color = color, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

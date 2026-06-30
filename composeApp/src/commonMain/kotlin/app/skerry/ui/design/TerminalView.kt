@@ -1330,7 +1330,7 @@ private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: Termina
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Sym("terminal", size = 15.sp, color = D.moss)
-                Txt(cmd, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+                Txt(cmd, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 AiActionChip("Run", D.moss, enabled = terminal != null) {
                     // Run = подтверждение: команда + CR (Enter) → исполняется в шелле.
                     controller.confirm()?.let { terminal?.send(it + "\r") }
@@ -1383,7 +1383,7 @@ private fun AiStatusRow(icon: String, text: String, color: Color, mono: FontFami
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Sym(icon, size = 14.sp, color = color)
-        Txt(text, color = color, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+        Txt(text, color = color, size = 12.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

@@ -132,6 +132,42 @@ class TerminalAiControllerTest {
     }
 
     @Test
+    fun `strips wrapping backticks the model sometimes adds`() = runTest {
+        // Регрессия: `free -h` в бэктиках bash понимает как подстановку → выполняет и падает.
+        val p = CapturingProvider(deltas = listOf("`free -h`"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("show memory")
+        advanceUntilIdle()
+
+        assertEquals("free -h", c.pending)
+    }
+
+    @Test
+    fun `strips a fenced code block with a language tag`() = runTest {
+        val p = CapturingProvider(deltas = listOf("```bash\nfree -h\n```"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("show memory")
+        advanceUntilIdle()
+
+        assertEquals("free -h", c.pending)
+    }
+
+    @Test
+    fun `treats a hash-prefixed refusal as an error not a runnable command`() = runTest {
+        val p = CapturingProvider(deltas = listOf("# I cannot do that safely"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("wipe the disk")
+        advanceUntilIdle()
+
+        assertNull(c.pending)
+        assertNotNull(c.error)
+        assertTrue(c.error!!.contains("cannot", ignoreCase = true))
+    }
+
+    @Test
     fun `confirm returns the pending command and clears it`() = runTest {
         val p = CapturingProvider(deltas = listOf("uptime"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
