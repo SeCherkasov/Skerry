@@ -87,7 +87,14 @@ class TerminalAiController(
                     streaming = sb.toString()
                 }
                 val command = sanitizeCommand(sb.toString())
-                if (command == null) error = "The assistant returned no command." else pending = command
+                when {
+                    command == null -> error = "The assistant returned no command."
+                    // По контракту COMMAND_PROMPT непечатаемый/невозможный запрос модель возвращает
+                    // строкой на «#» — это объяснение, а не команда: показываем как ошибку, не исполняем.
+                    command.startsWith("#") ->
+                        error = command.trimStart('#').trim().ifEmpty { "The assistant declined this request." }
+                    else -> pending = command
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AiException) {
@@ -114,15 +121,30 @@ class TerminalAiController(
     }
 
     /**
-     * Привести сырой вывод модели к ОДНОЙ строке ввода без управляющих символов. Критично для
-     * инварианта «подтверждение перед выполнением»: вставляемая по [confirm] команда физически не может
-     * нести перевод строки (иначе `send` авто-исполнил бы её), даже если модель вернула многострочный
-     * текст или CR/LF-инъекцию. Берём первую непустую строку, выкидываем control-байты (кроме таба).
+     * Привести сырой вывод модели к ОДНОЙ строке ввода без управляющих символов и markdown-обёрток.
+     * Критично для инварианта «подтверждение перед выполнением»: вставляемая по [confirm] команда
+     * физически не может нести перевод строки (иначе `send` авто-исполнил бы её), даже если модель
+     * вернула многострочный текст или CR/LF-инъекцию.
+     *
+     * Шаги: снимаем ```-заборчик (с возможным языковым тегом), берём первую непустую строку, режем
+     * control-байты (кроме таба), затем срезаем одиночные inline-бэктики вокруг команды — иначе bash
+     * воспримет `` `free -h` `` как подстановку команды (выполнит и попробует запустить её вывод).
      * `null` — команды нет.
      */
     private fun sanitizeCommand(raw: String): String? {
-        val firstLine = raw.trim().lineSequence().firstOrNull { it.isNotBlank() } ?: return null
-        val cleaned = firstLine.filter { it == '\t' || it.code >= 0x20 }.trim()
+        var text = raw.trim()
+        if (text.startsWith("```") && text.endsWith("```") && text.length > 6) {
+            text = text.substring(3, text.length - 3)
+            val firstTok = text.substringBefore('\n').trim()
+            // ```bash / ```sh — языковой тег на первой строке заборчика, отбрасываем.
+            if (firstTok.isNotEmpty() && firstTok.none { it.isWhitespace() } &&
+                firstTok.all { it.isLetterOrDigit() || it == '-' }
+            ) {
+                text = text.substringAfter('\n', "")
+            }
+        }
+        val firstLine = text.lineSequence().firstOrNull { it.isNotBlank() } ?: return null
+        val cleaned = firstLine.filter { it == '\t' || it.code >= 0x20 }.trim().trim('`').trim()
         return cleaned.ifEmpty { null }
     }
 
