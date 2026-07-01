@@ -127,22 +127,26 @@ private fun LiveKnownHostsView(controller: KnownHostsController) {
         KnownHostsHeader()
         HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
-                mismatches.forEach { mismatch ->
-                    MismatchBanner(
-                        mismatch = mismatch,
-                        onReview = { selectedKey = mismatch.identity() },
-                        onDismiss = { controller.reject(mismatch) },
-                    )
-                }
-                if (entries.isEmpty()) {
-                    EmptyKnownHosts()
-                } else {
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
-                        KnownHostsTableHeader()
-                        entries.forEach { entry ->
-                            HLine()
-                            KnownRowLive(entry, mono, onForget = { controller.forget(entry) })
+            if (entries.isEmpty() && mismatches.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { EmptyKnownHosts() }
+            } else {
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
+                    mismatches.forEach { mismatch ->
+                        MismatchBanner(
+                            mismatch = mismatch,
+                            onReview = { selectedKey = mismatch.identity() },
+                            onDismiss = { controller.reject(mismatch) },
+                        )
+                    }
+                    if (entries.isEmpty()) {
+                        EmptyKnownHosts()
+                    } else {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
+                            KnownHostsTableHeader()
+                            entries.forEach { entry ->
+                                HLine()
+                                KnownRowLive(entry, mono, onForget = { controller.forget(entry) })
+                            }
                         }
                     }
                 }
@@ -244,12 +248,10 @@ private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -
 
 @Composable
 private fun EmptyKnownHosts() {
-    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("fingerprint", size = 26.sp, color = D.faint)
-            Txt(stringResource(Res.string.lib_known_empty_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt(stringResource(Res.string.lib_known_empty_desc), color = D.faint, size = 11.5.sp)
-        }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Sym("fingerprint", size = 26.sp, color = D.faint)
+        Txt(stringResource(Res.string.lib_known_empty_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+        Txt(stringResource(Res.string.lib_known_empty_desc), color = D.faint, size = 11.5.sp)
     }
 }
 

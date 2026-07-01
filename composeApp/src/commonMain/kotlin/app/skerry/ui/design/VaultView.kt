@@ -207,13 +207,15 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 )
                 HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    Column(
-                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        if (credItems.isEmpty()) {
+                    if (credItems.isEmpty()) {
+                        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                             VaultEmptyCategory(category)
-                        } else {
+                        }
+                    } else {
+                        Column(
+                            Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
                             credItems.forEach { credential ->
                                 LiveSecretCard(
                                     credential = credential,
@@ -475,17 +477,15 @@ internal fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int =
 
 @Composable
 private fun VaultEmptyCategory(category: VaultCategoryKind) {
-    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym(category.icon, size = 26.sp, color = D.faint)
-            val (title, hint) = when (category) {
-                VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vault_empty_ssh_title) to stringResource(Res.string.vault_empty_ssh_hint)
-                VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vault_empty_passwords_title) to stringResource(Res.string.vault_empty_passwords_hint)
-                VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vault_empty_certificates_title) to stringResource(Res.string.vault_empty_certificates_hint)
-            }
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            if (hint.isNotEmpty()) Txt(hint, color = D.faint, size = 11.5.sp)
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Sym(category.icon, size = 26.sp, color = D.faint)
+        val (title, hint) = when (category) {
+            VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vault_empty_ssh_title) to stringResource(Res.string.vault_empty_ssh_hint)
+            VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vault_empty_passwords_title) to stringResource(Res.string.vault_empty_passwords_hint)
+            VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vault_empty_certificates_title) to stringResource(Res.string.vault_empty_certificates_hint)
         }
+        Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+        if (hint.isNotEmpty()) Txt(hint, color = D.faint, size = 11.5.sp)
     }
 }
 

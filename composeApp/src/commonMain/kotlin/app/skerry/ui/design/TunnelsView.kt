@@ -167,10 +167,10 @@ private fun GlobalTunnelsBody(
 
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
-            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
-                if (tunnels.isEmpty()) {
-                    EmptyTunnels()
-                } else {
+            if (tunnels.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { EmptyTunnels() }
+            } else {
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
                         TunnelHeaderRow()
                         tunnels.forEach { entry ->
@@ -232,12 +232,10 @@ private fun GlobalTunnelsBody(
 
 @Composable
 private fun EmptyTunnels() {
-    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("lan", size = 26.sp, color = D.faint)
-            Txt(stringResource(Res.string.ports_no_tunnels_yet), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt(stringResource(Res.string.ports_add_tunnel_right), color = D.faint, size = 11.5.sp)
-        }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Sym("lan", size = 26.sp, color = D.faint)
+        Txt(stringResource(Res.string.ports_no_tunnels_yet), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+        Txt(stringResource(Res.string.ports_add_tunnel_right), color = D.faint, size = 11.5.sp)
     }
 }
 
