@@ -65,6 +65,10 @@ kotlin {
         val jvmSharedMain by getting {
             dependencies {
                 implementation(libs.sshj)
+                // sshj логирует через slf4j-api; без binding'а SLF4J печатает «No SLF4J providers
+                // were found» и уходит в NOP. Явный no-op провайдер убирает это предупреждение на
+                // обоих таргетах (desktop + Android). runtimeOnly — код на slf4j-nop не ссылается.
+                runtimeOnly(libs.slf4j.nop)
                 // Явно: транзитивный bcprov sshj не виден на compile classpath, а SshjTransport
                 // ссылается на BouncyCastleProvider для подмены урезанного системного «BC» на Android.
                 implementation(libs.bouncycastle.prov)
