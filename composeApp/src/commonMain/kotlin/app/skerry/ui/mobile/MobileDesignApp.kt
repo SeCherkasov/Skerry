@@ -89,6 +89,9 @@ fun MobileDesignApp(
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
     sessions: SessionsController? = null,
+    // AI-контроллер снаружи (офскрин-рендер экрана AI с фейковым провайдером); null — строится
+    // из deps.vault ниже, как обычно.
+    aiOverride: AiAssistantController? = null,
     // Точка миграции данных при разблокировке vault (паритет с desktop `main`/`DesktopDesignApp`).
     // No-op в превью/офскрине; Android-точка входа подставит вызов VaultMigration, когда появится.
     onVaultUnlocked: () -> Unit = {},
@@ -129,7 +132,7 @@ fun MobileDesignApp(
     // (aiProviderFactory + localAi из платформенного графа). Строится при наличии vault (в превью —
     // null → AI-поверхности показывают мок). На старте vault залочен (settings=дефолт); refresh при
     // разблокировке.
-    val ai = remember(deps.vault, scope) {
+    val builtAi = remember(deps.vault, scope) {
         deps.vault?.let { v ->
             val store = AiSettingsStore(v)
             AiAssistantController(
@@ -143,6 +146,7 @@ fun MobileDesignApp(
             )
         }
     }
+    val ai = aiOverride ?: builtAi
     // AI-настройки живут записью SETTINGS в (синхронизируемом) vault. Контроллер надо перечитывать,
     // когда синк подтянул записи с сервера — иначе BYOK-ключ, настроенный на другом устройстве, в
     // мобильном UI не появится без перезахода. Разблокировку vault обрабатываем ОТДЕЛЬНО, в

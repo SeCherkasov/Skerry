@@ -126,13 +126,14 @@ fun main() {
     val hosts = if (live) seededHosts(boundCredentialId = boundCredentialId) else null
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
     val knownHosts = if (live) seededKnownHosts() else null
+    val ai = if (live) seededAi() else null
 
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null, onCreate = { _, _ -> }) } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}, onForgotPassword = {}) } } }
         "corrupted" -> { { GateScreenPreview { DesktopCorruptedScreen(onReset = {}) } } }
         "reset" -> { { GateScreenPreview { DesktopResetScreen(onConfirm = {}, onCancel = {}) } } }
-        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector) } }
+        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, ai = ai) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -162,6 +163,9 @@ fun main() {
 private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean) {
     val state = MobileDesignState()
     val hosts = if (live) seededHosts() else null
+    // Живой AI-контроллер (фейковый провайдер) — чтобы экран More → AI & privacy рендерился
+    // реальной формой, а не пустым заголовком (без контроллера экран рисует только хедер).
+    val ai = if (live) seededAi() else null
     // Менеджер known-hosts засеваем только в live-режиме — иначе экран Known берёт встроенный мок.
     val knownHosts = if (live) seededKnownHosts() else null
     // Keychain засеваем для оверлея sheet (live) — чтобы пикер аутентификации показал сохранённые секреты.
@@ -193,7 +197,7 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     if (overlay == "sheet") state.openNewConn() // лист New connection поверх текущего таба
     // ширина/высота сцены — в ПИКСЕЛЯХ: 780×1688 при density 2 = логические 390×844dp (телефон).
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
-        SkerryTheme { MobileDesignApp(deps = deps, state = state, sessions = sessions) }
+        SkerryTheme { MobileDesignApp(deps = deps, state = state, sessions = sessions, aiOverride = ai) }
     }
     var img = scene.render(0)
     for (i in 1..80) {
@@ -352,6 +356,43 @@ private fun seededKnownHosts(): KnownHostsController {
         }
     }
     return KnownHostsController(store, mismatches) { "2026-06-22T12:00:00Z" }
+}
+
+/**
+ * Живой AI-контроллер для офскрин-рендера настроек AI (desktop-таб и мобильный экран): фейковый
+ * провайдер с заготовленным ответом, первая модель каталога «установлена», BYOK-ключ заполнен,
+ * quick-chat засеян одним обменом. Провайдер по умолчанию — `-Dskerry.screenshot.aiProvider`
+ * (CLOUD/DEVICE/OFF; по умолчанию CLOUD) — OFF рендерит состояние «AI выключен».
+ */
+private fun seededAi(): app.skerry.ui.ai.AiAssistantController {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val kind = runCatching {
+        app.skerry.shared.ai.AiProviderKind.valueOf(System.getProperty("skerry.screenshot.aiProvider", "CLOUD"))
+    }.getOrDefault(app.skerry.shared.ai.AiProviderKind.CLOUD)
+    val first = app.skerry.shared.ai.local.LocalModelCatalog.models.first()
+    var settings = app.skerry.shared.ai.AiSettings(apiKey = "sk-demo", provider = kind, localModelId = first.id)
+    val fakeProvider = object : app.skerry.shared.ai.AiProvider {
+        override fun chat(request: app.skerry.shared.ai.AiChatRequest): Flow<app.skerry.shared.ai.AiDelta> = flow {
+            emit(app.skerry.shared.ai.AiDelta("Use scp: scp file.txt user@host:/path/ — it copies over SSH with the same credentials."))
+        }
+        override suspend fun close() {}
+    }
+    val controller = app.skerry.ui.ai.AiAssistantController(
+        initialSettings = settings,
+        persist = { settings = it },
+        providerFactory = { fakeProvider },
+        scope = scope,
+        reload = { settings },
+        localInstalled = { it.id == first.id },
+        models = app.skerry.ui.ai.LocalModelController(
+            installed = { it.id == first.id },
+            fetch = { flow {} },
+            remove = {},
+            scope = scope,
+        ),
+    )
+    if (controller.enabled) controller.ask("how do I copy a file to the server?")
+    return controller
 }
 
 /**
