@@ -40,7 +40,7 @@
     <string name="term_metric_disk">Disk /</string>
     <string name="term_info_system">SYSTEM</string>
     <string name="term_ai_thinking">Thinking…</string>
-    <string name="term_ai_ask_placeholder">Ask Skerry: \'find files larger than 100MB\'</string>
+    <string name="term_ai_ask_placeholder">Ask Skerry: “find files larger than 100MB”</string>
     <string name="term_ai_run">Run</string>
     <string name="term_ai_run_anyway">Run anyway</string>
     <string name="term_ai_confirm_run">Confirm run</string>

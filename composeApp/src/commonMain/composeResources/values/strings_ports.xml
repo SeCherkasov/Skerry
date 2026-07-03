@@ -35,8 +35,8 @@
     <string name="ports_col_via_host">VIA HOST</string>
     <string name="ports_col_active">ACTIVE</string>
     <string name="ports_remove_confirm_title">Remove \"%1$s\"?</string>
-    <string name="ports_remove_active_message">This tunnel is active — it will be disconnected and deleted. This can\'t be undone.</string>
-    <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can\'t be undone.</string>
+    <string name="ports_remove_active_message">This tunnel is active — it will be disconnected and deleted. This can't be undone.</string>
+    <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can't be undone.</string>
     <string name="ports_type_local">LOCAL</string>
     <string name="ports_type_remote">REMOTE</string>
     <string name="ports_type_socks">SOCKS</string>

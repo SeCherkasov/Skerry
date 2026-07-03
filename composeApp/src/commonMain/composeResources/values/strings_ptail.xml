@@ -10,5 +10,5 @@
     <string name="ptail_err_auth_failed">Authentication failed</string>
     <string name="ptail_err_forward_failed">Port forwarding failed</string>
     <string name="ptail_err_connection_failed">Connection failed</string>
-    <string name="ptail_forward_raise_failed">Couldn\'t start port forward</string>
+    <string name="ptail_forward_raise_failed">Couldn't start port forward</string>
 </resources>
