@@ -64,6 +64,8 @@ kotlin {
         // sshj-транспорт, SFTP-клиент, файловые сторы host/known-hosts.
         val jvmSharedMain by getting {
             dependencies {
+                // Wire-контракт клиент⇆сервер (общий с server — единый источник DTO вместо зеркала).
+                implementation(project(":sync-wire"))
                 implementation(libs.sshj)
                 // sshj логирует через slf4j-api; без binding'а SLF4J печатает «No SLF4J providers
                 // were found» и уходит в NOP. Явный no-op провайдер убирает это предупреждение на

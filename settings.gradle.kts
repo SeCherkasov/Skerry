@@ -43,6 +43,7 @@ val serverOnly = providers.gradleProperty("serverOnly").isPresent ||
     System.getenv("SKERRY_SERVER_ONLY") == "1"
 
 include(":server")
+include(":sync-wire") // wire-контракт клиент⇆сервер — нужен и serverOnly-сборке
 if (!serverOnly) {
     include(":shared")
     include(":composeApp")

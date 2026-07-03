@@ -2,14 +2,14 @@ package app.skerry.server.routes
 
 import app.skerry.server.RateLimits
 import app.skerry.server.Services
-import app.skerry.server.model.ChallengeRequest
-import app.skerry.server.model.ChallengeResponse
+import app.skerry.sync.wire.ChallengeRequest
+import app.skerry.sync.wire.ChallengeResponse
 import app.skerry.server.model.ErrorResponse
-import app.skerry.server.model.RefreshRequest
-import app.skerry.server.model.RegisterRequest
-import app.skerry.server.model.TokenResponse
-import app.skerry.server.model.VerifyRequest
-import app.skerry.server.model.VerifyResponse
+import app.skerry.sync.wire.RefreshRequest
+import app.skerry.sync.wire.RegisterRequest
+import app.skerry.sync.wire.TokenResponse
+import app.skerry.sync.wire.VerifyRequest
+import app.skerry.sync.wire.VerifyResponse
 import app.skerry.server.model.unb64
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.ratelimit.rateLimit

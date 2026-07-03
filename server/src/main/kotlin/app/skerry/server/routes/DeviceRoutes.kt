@@ -4,8 +4,8 @@ import app.skerry.server.Services
 import app.skerry.server.accountId
 import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
-import app.skerry.server.model.DeviceDto
-import app.skerry.server.model.DevicesResponse
+import app.skerry.sync.wire.DeviceDto
+import app.skerry.sync.wire.DevicesResponse
 import app.skerry.server.model.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond

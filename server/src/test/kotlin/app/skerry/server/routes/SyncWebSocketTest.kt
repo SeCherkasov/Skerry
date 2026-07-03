@@ -1,7 +1,7 @@
 package app.skerry.server.routes
 
 import app.skerry.server.configureServer
-import app.skerry.server.model.TokenResponse
+import app.skerry.sync.wire.TokenResponse
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
