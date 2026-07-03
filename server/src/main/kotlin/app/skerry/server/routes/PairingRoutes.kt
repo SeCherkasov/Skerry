@@ -5,10 +5,10 @@ import app.skerry.server.Services
 import app.skerry.server.accountId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.ErrorResponse
-import app.skerry.server.model.PairingClaimRequest
-import app.skerry.server.model.PairingClaimResponse
-import app.skerry.server.model.PairingStartRequest
-import app.skerry.server.model.PairingStartResponse
+import app.skerry.sync.wire.PairingClaimRequest
+import app.skerry.sync.wire.PairingClaimResponse
+import app.skerry.sync.wire.PairingStartRequest
+import app.skerry.sync.wire.PairingStartResponse
 import app.skerry.server.model.b64
 import app.skerry.server.model.unb64
 import io.ktor.http.HttpStatusCode

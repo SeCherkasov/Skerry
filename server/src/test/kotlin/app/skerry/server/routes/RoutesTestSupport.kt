@@ -3,10 +3,10 @@ package app.skerry.server.routes
 import app.skerry.server.Services
 import app.skerry.server.config.ServerConfig
 import app.skerry.server.db.Db
-import app.skerry.server.model.PushRequest
-import app.skerry.server.model.RecordDto
-import app.skerry.server.model.RegisterRequest
-import app.skerry.server.model.TokenResponse
+import app.skerry.sync.wire.PushRequest
+import app.skerry.sync.wire.RecordDto
+import app.skerry.sync.wire.RegisterRequest
+import app.skerry.sync.wire.TokenResponse
 import app.skerry.server.model.b64
 import com.nimbusds.srp6.SRP6ClientSession
 import com.nimbusds.srp6.SRP6CryptoParams

@@ -5,10 +5,10 @@ import app.skerry.server.accountId
 import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.ErrorResponse
-import app.skerry.server.model.KeysResponse
-import app.skerry.server.model.PushRequest
-import app.skerry.server.model.PushResponse
-import app.skerry.server.model.RecordsResponse
+import app.skerry.sync.wire.KeysResponse
+import app.skerry.sync.wire.PushRequest
+import app.skerry.sync.wire.PushResponse
+import app.skerry.sync.wire.RecordsResponse
 import app.skerry.server.model.b64
 import app.skerry.server.model.toDto
 import app.skerry.server.model.toIncoming

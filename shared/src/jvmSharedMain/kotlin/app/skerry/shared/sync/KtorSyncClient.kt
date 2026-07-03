@@ -1,5 +1,22 @@
 package app.skerry.shared.sync
 
+import app.skerry.sync.wire.ChallengeRequest
+import app.skerry.sync.wire.ChallengeResponse
+import app.skerry.sync.wire.DevicesResponse
+import app.skerry.sync.wire.KeysResponse
+import app.skerry.sync.wire.PairingClaimRequest
+import app.skerry.sync.wire.PairingClaimResponse
+import app.skerry.sync.wire.PairingStartRequest
+import app.skerry.sync.wire.PairingStartResponse
+import app.skerry.sync.wire.PushRequest
+import app.skerry.sync.wire.PushResponse
+import app.skerry.sync.wire.RecordDto
+import app.skerry.sync.wire.RecordsResponse
+import app.skerry.sync.wire.RefreshRequest
+import app.skerry.sync.wire.RegisterRequest
+import app.skerry.sync.wire.TokenResponse
+import app.skerry.sync.wire.VerifyRequest
+import app.skerry.sync.wire.VerifyResponse
 import com.nimbusds.srp6.SRP6ClientSession
 import com.nimbusds.srp6.SRP6CryptoParams
 import com.nimbusds.srp6.SRP6Exception
@@ -56,10 +73,10 @@ class KtorSyncClient(
         // Клиент сам считает соль и верификатор из authKey — сервер пароля не видит.
         val salt = BigInteger(256, random)
         val verifier = SRP6VerifierGenerator(params).generateVerifier(salt, accountId, authKey.toHex())
-        val resp: TokenResponseWire = post("/auth/register") {
+        val resp: TokenResponse = post("/auth/register") {
             contentType(ContentType.Application.Json)
             setBody(
-                RegisterRequestWire(
+                RegisterRequest(
                     accountId = accountId,
                     srpSalt = salt.toString(16),
                     srpVerifier = verifier.toString(16),
@@ -77,16 +94,16 @@ class KtorSyncClient(
         val srp = SRP6ClientSession()
         srp.step1(accountId, authKey.toHex())
 
-        val challenge: ChallengeResponseWire = post("/auth/srp/challenge") {
+        val challenge: ChallengeResponse = post("/auth/srp/challenge") {
             contentType(ContentType.Application.Json)
-            setBody(ChallengeRequestWire(accountId))
+            setBody(ChallengeRequest(accountId))
         }.bodyChecked()
 
         val creds = srp.step2(params, BigInteger(challenge.salt, 16), BigInteger(challenge.b, 16))
-        val verify: VerifyResponseWire = post("/auth/srp/verify") {
+        val verify: VerifyResponse = post("/auth/srp/verify") {
             contentType(ContentType.Application.Json)
             setBody(
-                VerifyRequestWire(
+                VerifyRequest(
                     challengeId = challenge.challengeId,
                     a = creds.A.toString(16),
                     m1 = creds.M1.toString(16),
@@ -107,28 +124,28 @@ class KtorSyncClient(
     }
 
     override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {
-        val resp: KeysResponseWire = get("/vault/keys") { bearerAuth(session.accessToken) }.bodyChecked()
+        val resp: KeysResponse = get("/vault/keys") { bearerAuth(session.accessToken) }.bodyChecked()
         return resp.wrappedDataKey.unb64()
     }
 
     override suspend fun pull(session: SyncSession, since: Long): RecordPage {
-        val resp: RecordsResponseWire = get("/vault/records?since=$since") {
+        val resp: RecordsResponse = get("/vault/records?since=$since") {
             bearerAuth(session.accessToken)
         }.bodyChecked()
         return RecordPage(resp.records.map { it.toRemote() }, resp.cursor, resp.compactedIds)
     }
 
     override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
-        val resp: PushResponseWire = put("/vault/records") {
+        val resp: PushResponse = put("/vault/records") {
             bearerAuth(session.accessToken)
             contentType(ContentType.Application.Json)
-            setBody(PushRequestWire(records.map { it.toWire() }))
+            setBody(PushRequest(records.map { it.toWire() }))
         }.bodyChecked()
         return RecordPage(resp.records.map { it.toRemote() }, resp.cursor)
     }
 
     override suspend fun listDevices(session: SyncSession): List<RemoteDevice> {
-        val resp: DevicesResponseWire = get("/devices") { bearerAuth(session.accessToken) }.bodyChecked()
+        val resp: DevicesResponse = get("/devices") { bearerAuth(session.accessToken) }.bodyChecked()
         return resp.devices.map { RemoteDevice(it.id, it.name, it.createdAt, it.lastSeenAt, it.revoked, it.current) }
     }
 
@@ -142,26 +159,26 @@ class KtorSyncClient(
     }
 
     override suspend fun refresh(session: SyncSession): SyncSession {
-        val resp: TokenResponseWire = post("/auth/refresh") {
+        val resp: TokenResponse = post("/auth/refresh") {
             contentType(ContentType.Application.Json)
-            setBody(RefreshRequestWire(session.refreshToken))
+            setBody(RefreshRequest(session.refreshToken))
         }.bodyChecked()
         return SyncSession(session.accountId, resp.accessToken, resp.refreshToken)
     }
 
     override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket {
-        val resp: PairingStartResponseWire = post("/pairing/start") {
+        val resp: PairingStartResponse = post("/pairing/start") {
             bearerAuth(session.accessToken)
             contentType(ContentType.Application.Json)
-            setBody(PairingStartRequestWire(encryptedDataKey.b64()))
+            setBody(PairingStartRequest(encryptedDataKey.b64()))
         }.bodyChecked()
         return PairingTicket(resp.code, resp.expiresAt)
     }
 
     override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult {
-        val resp: PairingClaimResponseWire = post("/pairing/claim") {
+        val resp: PairingClaimResponse = post("/pairing/claim") {
             contentType(ContentType.Application.Json)
-            setBody(PairingClaimRequestWire(code, device.id, device.name))
+            setBody(PairingClaimRequest(code, device.id, device.name))
         }.bodyChecked()
         return PairingResult(
             accountId = resp.accountId,
@@ -240,8 +257,8 @@ class KtorSyncClient(
     private fun ByteArray.b64(): String = Base64.getEncoder().encodeToString(this)
     private fun String.unb64(): ByteArray = Base64.getDecoder().decode(this)
 
-    private fun RecordDtoWire.toRemote() = RemoteRecord(id, type, version, updatedAt, deviceId, deleted, blob.unb64())
-    private fun RemoteRecord.toWire() = RecordDtoWire(id, type, version, updatedAt, deviceId, deleted, blob.b64())
+    private fun RecordDto.toRemote() = RemoteRecord(id, type, version, updatedAt, deviceId, deleted, blob.unb64())
+    private fun RemoteRecord.toWire() = RecordDto(id, type, version, updatedAt, deviceId, deleted, blob.b64())
 
     companion object {
         fun defaultHttpClient(): HttpClient = HttpClient(CIO) {

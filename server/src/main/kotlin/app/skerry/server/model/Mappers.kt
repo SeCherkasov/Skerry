@@ -2,6 +2,7 @@ package app.skerry.server.model
 
 import app.skerry.server.db.IncomingRecord
 import app.skerry.server.db.StoredRecord
+import app.skerry.sync.wire.RecordDto
 import io.ktor.server.plugins.BadRequestException
 import java.util.Base64
 
