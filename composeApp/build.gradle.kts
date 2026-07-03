@@ -111,7 +111,7 @@ tasks.register<JavaExec>("screenshotDesign") {
     val desktopMainComp = kotlin.targets.getByName("desktop").compilations.getByName("main")
     dependsOn(desktopMainComp.compileTaskProvider)
     classpath(desktopMainComp.output.allOutputs, desktopMainComp.runtimeDependencyFiles)
-    mainClass.set("app.skerry.ui.design.ScreenshotKt")
+    mainClass.set("app.skerry.ui.desktop.ScreenshotKt")
     systemProperty("skerry.screenshot.out", providers.systemProperty("skerry.screenshot.out").getOrElse("/tmp/skerry_design.png"))
     systemProperty("skerry.screenshot.view", providers.systemProperty("skerry.screenshot.view").getOrElse("Terminal"))
     systemProperty("skerry.screenshot.overlay", providers.systemProperty("skerry.screenshot.overlay").getOrElse(""))
