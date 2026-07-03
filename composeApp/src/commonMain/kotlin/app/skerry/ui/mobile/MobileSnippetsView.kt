@@ -7,8 +7,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,15 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -38,19 +30,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.Snippet
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
+import app.skerry.ui.snippet.SnippetFormState
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.matches
 import app.skerry.ui.snippet.snippetTagSuggestions
@@ -73,7 +63,6 @@ import app.skerry.ui.generated.resources.lib_snippets_screen_title
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
@@ -128,7 +117,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                Txt(stringResource(Res.string.lib_snippets_screen_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                MobileScreenTitle(stringResource(Res.string.lib_snippets_screen_title))
             }
             if (snippets.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp)) {
@@ -152,18 +141,10 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
 
         // FAB добавления (правый-нижний, над таб-баром). Скрыт, пока открыт лист-редактор.
         if (!sheetOpen) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 22.dp, bottom = 104.dp)
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(D.cyan)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { adding = true; editing = null },
-                contentAlignment = Alignment.Center,
-            ) {
-                Sym("add", size = 28.sp, color = Color(0xFF0A1A26))
-            }
+            MobileFabButton(
+                onClick = { adding = true; editing = null },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+            )
         }
 
         if (sheetOpen) {
@@ -196,7 +177,7 @@ private fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () ->
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
-            .background(Color(0x08FFFFFF))
+            .background(D.card)
             .border(1.dp, D.cyan08, RoundedCornerShape(13.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(14.dp),
@@ -277,36 +258,34 @@ private fun MobileSnippetEditSheet(
     onDelete: (() -> Unit)?,
     onRun: () -> Unit,
 ) {
-    var label by remember { mutableStateOf(entry?.snippet?.label ?: "") }
-    var command by remember { mutableStateOf(entry?.snippet?.command ?: "") }
-    var tags by remember { mutableStateOf(entry?.snippet?.tags ?: emptyList()) }
-    var tagDraft by remember { mutableStateOf("") }
-    val canSave = label.isNotBlank() && command.isNotBlank()
-
-    fun addTags(raw: String) {
-        tags = (tags + parseMobileSnippetTags(raw)).distinct()
-        tagDraft = ""
-    }
+    // Общее состояние формы (desktop ⇆ mobile): seed из entry (включая shortcut — Save не теряет
+    // назначенный на desktop хоткей), canSave, теги, сборка черновика.
+    val form = remember { SnippetFormState.fromEntry(entry) }
 
     MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.9f) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = D.text, size = 18.sp, weight = FontWeight.Bold)
             SnippetSheetField(stringResource(Res.string.lib_snippets_field_name)) {
-                SnippetSheetInput(label, { label = it }, stringResource(Res.string.lib_snippets_ph_name))
+                SnippetSheetInput(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name))
             }
             SnippetSheetField(stringResource(Res.string.lib_snippets_field_command)) {
-                SnippetSheetInput(command, { command = it }, "df -h | sort -k5 -r", mono = true, singleLine = false, minHeightDp = 88)
+                SnippetSheetInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, singleLine = false, minHeightDp = 88)
             }
             SnippetSheetField(stringResource(Res.string.lib_snippets_field_tags)) {
-                SnippetSheetTags(
-                    tags = tags,
-                    onRemove = { tag -> tags = tags - tag },
-                    draft = tagDraft,
-                    onDraftChange = { v -> if (v.contains(',')) addTags(v) else tagDraft = v },
-                    onCommit = { addTags(tagDraft) },
-                    allSnippets = allSnippets,
-                    selfId = entry?.id,
-                    onPick = { tag -> tags = (tags + tag).distinct(); tagDraft = "" },
+                // Свои теги исключаем через selected; подсказки берём из всех сниппетов (включая правимый —
+                // его собственные теги уже в selected, так что не предложатся повторно).
+                val others = remember(allSnippets, entry?.id) { allSnippets.filter { it.id != entry?.id } }
+                val suggestions = remember(others, form.tags, form.tagDraft) { snippetTagSuggestions(others, form.tags, form.tagDraft) }
+                MobileTagsEditor(
+                    tags = form.tags,
+                    onRemove = form::removeTag,
+                    draft = form.tagDraft,
+                    onDraftChange = form::updateTagDraft,
+                    onCommit = { form.addTags(form.tagDraft) },
+                    suggestions = suggestions,
+                    placeholder = stringResource(Res.string.lib_snippets_add_tag),
+                    onPick = form::pickTag,
+                    menuBackground = D.surface2,
                 )
             }
             if (canRun) {
@@ -314,14 +293,7 @@ private fun MobileSnippetEditSheet(
             }
             MobileSheetButton(
                 stringResource(Res.string.lib_snippets_save_snippet),
-                onClick = {
-                    if (canSave) {
-                        // Дослать недозафиксированный черновик тега (юзер набрал тег и сразу жмёт Save,
-                        // не нажав Enter/запятую) — иначе тег терялся бы.
-                        val finalTags = (tags + parseMobileSnippetTags(tagDraft)).distinct()
-                        onSave(SnippetDraft(id = entry?.id, label = label.trim(), command = command, tags = finalTags, shortcut = entry?.snippet?.shortcut))
-                    }
-                },
+                onClick = { if (form.canSave) onSave(form.toDraft()) },
                 modifier = Modifier.fillMaxWidth(),
             )
             if (onDelete != null) {
@@ -331,13 +303,6 @@ private fun MobileSnippetEditSheet(
         }
     }
 }
-
-/** Парсинг строки тегов (запятая/пробел/перевод строки), снимаем ведущий `#` — как desktop. */
-private fun parseMobileSnippetTags(text: String): List<String> =
-    text.split(',', ' ', '\n', '\t')
-        .map { it.trim().removePrefix("#") }
-        .filter { it.isNotEmpty() }
-        .distinct()
 
 @Composable
 private fun SnippetSheetField(label: String, content: @Composable () -> Unit) {
@@ -384,100 +349,6 @@ private fun SnippetSheetInput(
     )
 }
 
-/**
- * Редактор тегов листа с type-ahead: пилюли `#tag` + инлайн-ввод; при фокусе под полем раскрывается
- * список подсказок [snippetTagSuggestions] (теги других сниппетов, ещё не добавленные). Меню через
- * [AnchoredDropdown] с `focusable = false`, чтобы не отнимать фокус у поля.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SnippetSheetTags(
-    tags: List<String>,
-    onRemove: (String) -> Unit,
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    onCommit: () -> Unit,
-    allSnippets: List<Snippet>,
-    selfId: String?,
-    onPick: (String) -> Unit,
-) {
-    val fonts = LocalFonts.current
-    val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 14.sp, fontFamily = fonts.ui) }
-    var focused by remember { mutableStateOf(false) }
-    // Свои теги исключаем через selected; подсказки берём из всех сниппетов (включая правимый —
-    // его собственные теги уже в selected, так что не предложатся повторно).
-    val others = remember(allSnippets, selfId) { allSnippets.filter { it.id != selfId } }
-    val suggestions = remember(others, tags, draft) { snippetTagSuggestions(others, tags, draft) }
-    AnchoredDropdown(
-        expanded = focused && suggestions.isNotEmpty(),
-        onDismiss = { focused = false },
-        focusable = false,
-        trigger = {
-            FlowRow(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                tags.forEach { tag ->
-                    key(tag) {
-                        Row(
-                            Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 10.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Txt("#$tag", color = D.cyanBright, size = 12.5.sp)
-                            Box(
-                                Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onRemove(tag) }.padding(2.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Sym("close", size = 14.sp, color = D.cyanBright)
-                            }
-                        }
-                    }
-                }
-                BasicTextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    singleLine = true,
-                    textStyle = textStyle,
-                    cursorBrush = SolidColor(D.cyan),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 90.dp).onFocusChanged { focused = it.isFocused },
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = D.faint, size = 14.sp)
-                            inner()
-                        }
-                    },
-                )
-            }
-        },
-        menu = { width ->
-            Column(
-                Modifier
-                    .width(width)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-                    .heightIn(max = 240.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 4.dp),
-            ) {
-                suggestions.forEach { tag ->
-                    key(tag) {
-                        Box(
-                            Modifier.fillMaxWidth().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(tag) }.padding(horizontal = 14.dp, vertical = 11.dp),
-                        ) {
-                            Txt("#$tag", color = D.cyanBright, size = 14.sp)
-                        }
-                    }
-                }
-            }
-        },
-    )
-}
-
 // --- Статичный мок (превью/офскрин без менеджера) ---
 
 @Composable
@@ -486,7 +357,7 @@ private fun MobileSnippetsMock() {
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                Txt(stringResource(Res.string.lib_snippets_screen_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                MobileScreenTitle(stringResource(Res.string.lib_snippets_screen_title))
             }
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp),
@@ -494,7 +365,7 @@ private fun MobileSnippetsMock() {
             ) {
                 MOCK_MOBILE_SNIPPETS.forEach { s ->
                     Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(Color(0x08FFFFFF)).border(1.dp, D.cyan08, RoundedCornerShape(13.dp)).padding(14.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(D.card).border(1.dp, D.cyan08, RoundedCornerShape(13.dp)).padding(14.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                             Sym(s.icon, size = 18.sp, color = D.cyanBright)
@@ -510,11 +381,9 @@ private fun MobileSnippetsMock() {
             }
             Spacer(Modifier.height(96.dp))
         }
-        Box(
-            Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp).size(56.dp).clip(RoundedCornerShape(18.dp)).background(D.cyan),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym("add", size = 28.sp, color = Color(0xFF0A1A26))
-        }
+        MobileFabButton(
+            onClick = null,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+        )
     }
 }

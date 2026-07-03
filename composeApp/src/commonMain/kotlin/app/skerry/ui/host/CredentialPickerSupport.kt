@@ -6,6 +6,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_picker_type_certificate
 import app.skerry.ui.generated.resources.vtail_picker_type_password
 import app.skerry.ui.generated.resources.vtail_picker_type_ssh_key
+import app.skerry.ui.vault.VaultPresentation
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -20,8 +21,5 @@ internal fun CredentialSecret.pickerTypeLabel(): String = when (this) {
     is CredentialSecret.Certificate -> stringResource(Res.string.vtail_picker_type_certificate)
 }
 
-internal fun CredentialSecret.pickerIcon(): String = when (this) {
-    is CredentialSecret.Password -> "password"
-    is CredentialSecret.PrivateKey -> "key"
-    is CredentialSecret.Certificate -> "workspace_premium"
-}
+/** Иконка типа секрета — из общего [VaultPresentation.secretStyle], чтобы пикеры не разъезжались с Vault. */
+internal fun CredentialSecret.pickerIcon(): String = VaultPresentation.secretStyle(this).icon

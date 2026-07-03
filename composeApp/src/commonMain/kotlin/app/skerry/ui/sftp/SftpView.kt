@@ -7,6 +7,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -395,7 +395,7 @@ private fun LiveSftpView(
             title = stringResource(Res.string.sftp_new_folder),
             confirmLabel = stringResource(Res.string.sftp_create),
             initial = "",
-            existing = (target.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
+            existing = target.currentEntryNames(),
             onConfirm = { target.mkdir(it); creatingFolder = false },
             onDismiss = { creatingFolder = false },
         )
@@ -480,7 +480,7 @@ private fun LiveSftpView(
             title = stringResource(Res.string.sftp_rename),
             confirmLabel = stringResource(Res.string.sftp_rename),
             initial = item.name,
-            existing = (pane.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
+            existing = pane.currentEntryNames(),
             onConfirm = { pane.rename(item, it); renameTarget = null },
             onDismiss = { renameTarget = null },
         )
@@ -917,16 +917,7 @@ internal fun NameDialog(
     // Автофокус: поле должно быть готово к вводу сразу при открытии диалога, без клика.
     val fieldFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { fieldFocus.requestFocus() }
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .width(340.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(D.surface)
-                .border(1.dp, D.line, RoundedCornerShape(12.dp))
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+    SftpDialogFrame(onDismiss = onDismiss) {
             Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
             // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
             BasicTextField(
@@ -971,7 +962,6 @@ internal fun NameDialog(
                     bg = if (ok) D.cyan else D.whiteFaint,
                 )
             }
-        }
     }
 }
 
@@ -1018,7 +1008,7 @@ private fun ConfirmCopyDialog(
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         confirmBg = D.cyan,
-        confirmFg = Color(0xFF0A1A26),
+        confirmFg = D.ink,
     )
 }
 
@@ -1043,7 +1033,7 @@ private fun ConfirmMoveDialog(
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         confirmBg = D.cyan,
-        confirmFg = Color(0xFF0A1A26),
+        confirmFg = D.ink,
     )
 }
 
@@ -1060,32 +1050,26 @@ internal fun ConfirmDangerDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     confirmBg: Color = D.sunset,
-    confirmFg: Color = Color(0xFF0A1A26),
+    confirmFg: Color = D.ink,
 ) {
     var focusConfirm by remember { mutableStateOf(true) }
     val dialogFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { dialogFocus.requestFocus() }
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .width(340.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(D.surface)
-                .border(1.dp, D.line, RoundedCornerShape(12.dp))
-                .padding(18.dp)
-                .focusRequester(dialogFocus)
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.Enter, Key.NumPadEnter -> { if (focusConfirm) onConfirm() else onDismiss(); true }
-                        Key.Escape -> { onDismiss(); true }
-                        Key.DirectionLeft, Key.DirectionRight, Key.Tab -> { focusConfirm = !focusConfirm; true }
-                        else -> false
-                    }
+    SftpDialogFrame(
+        onDismiss = onDismiss,
+        modifier = Modifier
+            .focusRequester(dialogFocus)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.Enter, Key.NumPadEnter -> { if (focusConfirm) onConfirm() else onDismiss(); true }
+                    Key.Escape -> { onDismiss(); true }
+                    Key.DirectionLeft, Key.DirectionRight, Key.Tab -> { focusConfirm = !focusConfirm; true }
+                    else -> false
                 }
-                .focusable(),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+            }
+            .focusable(),
+    ) {
             Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
             Txt(body, color = D.faint, size = 12.sp)
             Row(
@@ -1098,7 +1082,32 @@ internal fun ConfirmDangerDialog(
                     PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmBg, fg = confirmFg)
                 }
             }
-        }
+    }
+}
+
+/**
+ * Общий каркас модалки SFTP: [Dialog] + карточка 340dp (поверхность/скругление 12/line-рамка,
+ * паддинг 18, контент колонкой с зазором 14). [modifier] дописывается ПОСЛЕ паддинга — так
+ * ConfirmDangerDialog вешает свой фокус/клавиатурный обработчик, не меняя каркас.
+ */
+@Composable
+private fun SftpDialogFrame(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .width(340.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(D.surface)
+                .border(1.dp, D.line, RoundedCornerShape(12.dp))
+                .padding(18.dp)
+                .then(modifier),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            content = content,
+        )
     }
 }
 
@@ -1117,16 +1126,7 @@ private fun DialogButtonFocus(focused: Boolean, content: @Composable () -> Unit)
 @Composable
 internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isDir = entry.type == FileItemType.Directory
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .width(340.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(D.surface)
-                .border(1.dp, D.line, RoundedCornerShape(12.dp))
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
+    SftpDialogFrame(onDismiss = onDismiss) {
             Txt(if (isDir) stringResource(Res.string.sftp_delete_folder_q) else stringResource(Res.string.sftp_delete_file_q), color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
             Txt(
                 if (isDir) stringResource(Res.string.sftp_delete_folder_body, entry.name)
@@ -1140,9 +1140,8 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.sftp_delete), onClick = onConfirm, bg = D.sunset, fg = Color(0xFF0A1A26))
+                PrimaryButton(stringResource(Res.string.sftp_delete), onClick = onConfirm, bg = D.sunset, fg = D.ink)
             }
-        }
     }
 }
 

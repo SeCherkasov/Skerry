@@ -37,4 +37,10 @@
     <string name="ports_remove_confirm_title">Удалить «%1$s»?</string>
     <string name="ports_remove_active_message">Туннель активен — он будет отключён и удалён. Отменить нельзя.</string>
     <string name="ports_remove_inactive_message">Сохранённый туннель будет удалён. Отменить нельзя.</string>
+    <string name="ports_type_local">LOCAL</string>
+    <string name="ports_type_remote">REMOTE</string>
+    <string name="ports_type_socks">SOCKS</string>
+    <string name="ports_type_local_display">Локальный проброс (-L)</string>
+    <string name="ports_type_remote_display">Обратный проброс (-R)</string>
+    <string name="ports_type_socks_display">Динамический SOCKS (-D)</string>
 </resources>

@@ -69,6 +69,12 @@ object D {
     val strictFg = Color(0xFFE07060)
     val devBg = moss.copy(alpha = 0.16f)
     val whiteFaint = Color(0x1AFFFFFF) // rgba(255,255,255,0.1) — фон выключенного тумблера
+
+    // Общие поверхности/акценты, ранее захардкоженные по файлам (значения не менялись)
+    val ink = Color(0xFF0A1A26)   // «чернила» на cyan-акценте (текст/иконки на кнопках)
+    val card = Color(0x08FFFFFF)  // фон карточки-строки (rgba(255,255,255,0.03))
+    val scrim = Color(0xB304080C) // затемнение под мобильными листами/диалогами
+    val modalScrim = Color(0xB3060E16) // затемнение под desktop-модалками
 }
 
 /** UI-шрифт макета — Space Grotesk (400/500/600/700). */

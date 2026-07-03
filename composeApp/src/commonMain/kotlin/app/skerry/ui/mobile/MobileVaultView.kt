@@ -166,7 +166,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                Txt(stringResource(Res.string.vault_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                MobileScreenTitle(stringResource(Res.string.vault_title))
             }
             MobileVaultBanner()
             MobileCategoryPills(category, allCreds) { category = it; selectedId = null }
@@ -365,13 +365,9 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
     // повторный вызов завёл бы второй разбор того же секрета). null для неподходящего типа — без работы.
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
-    val (icon, iconColor) = when (credential.secret) {
-        is CredentialSecret.Certificate -> "workspace_premium" to D.moss
-        is CredentialSecret.PrivateKey -> "key" to D.cyanBright
-        is CredentialSecret.Password -> "password" to D.dim
-    }
+    val (icon, iconColor) = VaultPresentation.secretStyle(credential.secret)
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x08FFFFFF))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(D.card)
             .border(1.dp, D.cyan.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(14.dp),
@@ -451,11 +447,7 @@ private fun MobileSecretDetailSheet(
     val secret = credential.secret
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
-    val (icon, color, tinted) = when (secret) {
-        is CredentialSecret.Certificate -> Triple("workspace_premium", D.moss, true)
-        is CredentialSecret.PrivateKey -> Triple("key", D.cyanBright, true)
-        is CredentialSecret.Password -> Triple("password", D.dim, false)
-    }
+    val (icon, color, tinted) = VaultPresentation.secretStyle(secret)
     val subtitle = when (secret) {
         is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
         is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
@@ -526,7 +518,7 @@ private fun MobileVaultMock() {
     val mono = LocalFonts.current.mono
     Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-            Txt(stringResource(Res.string.vault_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+            MobileScreenTitle(stringResource(Res.string.vault_title))
         }
         MobileVaultBanner()
         Txt(
@@ -542,7 +534,7 @@ private fun MobileVaultMock() {
                 }
                 Txt("SHA256:8c3F1a…Qz9pK", color = D.dim, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
             }
-            MockKeyShell(D.dim, Color(0x08FFFFFF), D.cyan.copy(alpha = 0.08f)) {
+            MockKeyShell(D.dim, D.card, D.cyan.copy(alpha = 0.08f)) {
                 Txt("id_rsa_legacy", color = D.text, size = 14.5.sp, weight = FontWeight.SemiBold)
                 Txt("SHA256:2dE7b…Lm4xR", color = D.dim, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
             }

@@ -34,4 +34,7 @@
     <string name="more_ai_sending">Sending…</string>
     <string name="more_ai_ask">Ask</string>
     <string name="more_ai_clear">Clear</string>
+    <string name="more_biometric_prompt_title">Enable biometric unlock</string>
+    <string name="more_biometric_prompt_cancel">Cancel</string>
+    <string name="more_biometric_prompt_subtitle">Confirm your biometrics to unlock Skerry without typing the master password.</string>
 </resources>

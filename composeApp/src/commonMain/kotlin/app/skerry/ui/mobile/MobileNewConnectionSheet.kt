@@ -237,16 +237,20 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             SheetField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
             SheetField(stringResource(Res.string.conn_field_tags)) {
-                SheetTags(
+                // Подсказки — теги других хостов, ещё не добавленные сюда (паритет desktop Tags); в превью пусто.
+                val allHosts = hosts?.hosts ?: emptyList()
+                val suggestions = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
+                MobileTagsEditor(
                     tags = form.tags,
                     onRemove = { form.removeTag(it) },
                     draft = tagDraft,
                     // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
                     onDraftChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
                     onCommit = { form.addTag(tagDraft); tagDraft = "" },
-                    // Подсказки — теги других хостов, ещё не добавленные сюда (паритет desktop Tags); в превью пусто.
-                    allHosts = hosts?.hosts ?: emptyList(),
+                    suggestions = suggestions,
+                    placeholder = stringResource(Res.string.conn_tag_add_placeholder),
                     onPick = { tag -> form.addTag(tag); tagDraft = "" },
+                    menuBackground = SheetPanel,
                 )
             }
 
@@ -265,7 +269,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save_connection), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save_connection), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
             }
     }
     // Оверлей «New group» — сиблингом над листом (свой полноэкранный скрим), чтобы корректно подниматься над клавиатурой.
@@ -297,9 +301,10 @@ private fun SheetField(label: String, modifier: Modifier = Modifier, content: @C
  * Текстовое поле листа в стиле макета (тёмный фон + cyan-рамка, радиус 11).
  * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
  * многострочная моноширинная область для вставки приватного ключа (PEM), как desktop `ModalTextField`.
+ * internal: переиспользуется диалогами групп ([MobileGroupCreateDialog]/[MobileGroupRenameDialog]).
  */
 @Composable
-private fun SheetInput(
+internal fun SheetInput(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
@@ -337,102 +342,6 @@ private fun SheetInput(
             ) {
                 if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
                 inner()
-            }
-        },
-    )
-}
-
-/**
- * Редактор тегов: пилюли `#tag` с крестиком + инлайн-ввод нового тега (Enter/запятая фиксирует
- * пилюлю). [tags] — каноническая форма, на экране с префиксом `#`. При фокусе поля под ним
- * раскрывается type-ahead-список [tagSuggestions] (теги других [allHosts], ещё не добавленные сюда,
- * сужённые черновиком); тап по подсказке вызывает [onPick]. Меню через [AnchoredDropdown] с
- * `focusable = false`, чтобы не отнимать фокус и не прерывать набор.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SheetTags(
-    tags: List<String>,
-    onRemove: (String) -> Unit,
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    onCommit: () -> Unit,
-    allHosts: List<Host>,
-    onPick: (String) -> Unit,
-) {
-    val fonts = LocalFonts.current
-    val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 14.sp, fontFamily = fonts.ui) }
-    var focused by remember { mutableStateOf(false) }
-    val suggestions = remember(allHosts, tags, draft) { tagSuggestions(allHosts, tags, draft) }
-    AnchoredDropdown(
-        expanded = focused && suggestions.isNotEmpty(),
-        onDismiss = { focused = false },
-        focusable = false, // не красть фокус у поля ввода тега
-        trigger = {
-            FlowRow(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                tags.forEach { tag ->
-                    key(tag) {
-                        Row(
-                            Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 10.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Txt("#$tag", color = D.cyanBright, size = 12.5.sp)
-                            Box(
-                                Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onRemove(tag) }.padding(2.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Sym("close", size = 14.sp, color = D.cyanBright)
-                            }
-                        }
-                    }
-                }
-                BasicTextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    singleLine = true,
-                    textStyle = textStyle,
-                    cursorBrush = SolidColor(D.cyan),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 90.dp).onFocusChanged { focused = it.isFocused },
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = D.faint, size = 14.sp)
-                            inner()
-                        }
-                    },
-                )
-            }
-        },
-        menu = { width ->
-            Column(
-                Modifier
-                    .width(width)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(SheetPanel)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-                    .heightIn(max = 240.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 4.dp),
-            ) {
-                // Тап добавляет тег; фокус остаётся на поле — меню пересчитается без только что добавленного.
-                suggestions.forEach { tag ->
-                    key(tag) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(tag) }
-                                .padding(horizontal = 14.dp, vertical = 11.dp),
-                        ) {
-                            Txt("#$tag", color = D.cyanBright, size = 14.sp)
-                        }
-                    }
-                }
             }
         },
     )
@@ -660,135 +569,6 @@ private fun MobileGroupOption(title: String, selected: Boolean, icon: String? = 
         if (icon != null) Sym(icon, size = 18.sp, color = D.cyanBright)
         Txt(title, color = if (selected) D.cyanBright else D.text, size = 14.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
         if (selected) Sym("check", size = 17.sp, color = D.cyanBright)
-    }
-}
-
-/**
- * Маленький модальный диалог создания новой группы — полноэкранный оверлей на корне листа (не в
- * скролле формы), центрируется над клавиатурой через [imePadding]: поле имени + Cancel/Create.
- * Пустое имя не создаёт (кнопка неактивна). Имя только проставляется в форму — папка появится в
- * каталоге при сохранении хоста.
- */
-@Composable
-private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    val canCreate = name.isNotBlank()
-    val submit = { if (canCreate) onCreate(name) }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xB304080C))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
-            .imePadding(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier
-                .padding(horizontal = 32.dp)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(SheetPanel)
-                .border(1.dp, D.cyan14, RoundedCornerShape(18.dp))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .padding(20.dp),
-        ) {
-            Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            Spacer(Modifier.height(14.dp))
-            SheetInput(name, { name = it }, "Production")
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
-                        .padding(vertical = 13.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 15.sp, weight = FontWeight.Medium)
-                }
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
-                        .padding(vertical = 13.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Txt(stringResource(Res.string.conn_create), color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-/**
- * Диалог «Rename group» (карандаш у заголовка папки) — полноэкранный оверлей на корне над
- * клавиатурой ([imePadding]). Поле имени предзаполнено [initialName]; «Save» переименовывает
- * (хосты переезжают с группой), «Delete group» — разгруппировывает (профили целы).
- * Пустое/неизменное имя оставляет «Save» неактивной.
- */
-@Composable
-internal fun MobileGroupRenameDialog(
-    initialName: String,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-    onDelete: () -> Unit,
-) {
-    var name by remember(initialName) { mutableStateOf(initialName) }
-    val canSave = name.isNotBlank() && name.trim() != initialName
-    // Триммим здесь, чтобы и контроллер (Host.group), и синхронизация collapsedGroups получили
-    // одинаковый канонический ключ — иначе свёрнутость папки разъедется на хвостовом пробеле.
-    val submit = { if (canSave) onSave(name.trim()) }
-    // Системный «назад»/жест закрывает диалог (как тап по затемнению), перехватывая back до навигации каркаса.
-    PlatformBackHandler(onBack = onDismiss)
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xB304080C))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
-            .imePadding(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier
-                .padding(horizontal = 32.dp)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(SheetPanel)
-                .border(1.dp, D.cyan14, RoundedCornerShape(18.dp))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .padding(20.dp),
-        ) {
-            Txt(stringResource(Res.string.conn_group_rename_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Txt(stringResource(Res.string.conn_group_rename_hint), color = D.dim, size = 12.5.sp)
-            Spacer(Modifier.height(14.dp))
-            SheetInput(name, { name = it }, "Production")
-            Spacer(Modifier.height(18.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDelete)
-                        .padding(horizontal = 14.dp, vertical = 13.dp),
-                ) {
-                    Txt(stringResource(Res.string.conn_group_delete), color = D.sunset, size = 15.sp, weight = FontWeight.Medium)
-                }
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (canSave) D.cyan else D.cyan.copy(alpha = 0.4f))
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
-                        .padding(horizontal = 18.dp, vertical = 13.dp),
-                ) {
-                    Txt(stringResource(Res.string.conn_save), color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
-                }
-            }
-        }
     }
 }
 

@@ -113,7 +113,7 @@ internal fun MobileSheetButton(
     danger: Boolean = false,
 ) {
     val fg = when {
-        filled -> Color(0xFF0A1A26)
+        filled -> D.ink
         danger -> D.sunset
         else -> D.text
     }

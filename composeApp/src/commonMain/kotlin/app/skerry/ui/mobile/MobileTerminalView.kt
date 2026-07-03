@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.host.Host
-import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
@@ -281,7 +280,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                             .clickable(enabled = !controller.busy) { submit() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+                        Sym("arrow_upward", size = 16.sp, color = D.ink)
                     }
                 }
             }
@@ -505,7 +504,7 @@ private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = fal
         else -> KeyCapBg
     }
     val fg = when {
-        active -> Color(0xFF0A1A26)
+        active -> D.ink
         accent -> D.cyanBright
         else -> KeyCapFg
     }
@@ -587,7 +586,7 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.term_connect), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.term_connect), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
             }
         }
 }

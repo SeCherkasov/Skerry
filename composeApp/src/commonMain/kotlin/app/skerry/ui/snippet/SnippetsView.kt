@@ -220,84 +220,66 @@ private fun SnippetEditor(
     onSaved: (String) -> Unit,
     onDeleted: () -> Unit,
 ) {
-    var label by remember { mutableStateOf(entry?.snippet?.label ?: "") }
-    var command by remember { mutableStateOf(entry?.snippet?.command ?: "") }
-    var tags by remember { mutableStateOf(entry?.snippet?.tags ?: emptyList()) }
-    var tagDraft by remember { mutableStateOf("") }
-    var shortcut by remember { mutableStateOf(entry?.snippet?.shortcut) }
-
-    val canSave = label.isNotBlank() && command.isNotBlank()
-
-    fun addTags(raw: String) {
-        tags = (tags + parseSnippetTags(raw)).distinct()
-        tagDraft = ""
-    }
+    // Общее состояние формы (desktop ⇆ mobile): seed из entry, canSave, теги, сборка черновика.
+    // Без ключей remember: редактор пересоздаётся снаружи через key(selected?.id, adding).
+    val form = remember { SnippetFormState.fromEntry(entry) }
 
     // Редактор — чистая форма: запуск делается из палитры терминала (активная сессия), хоткеем или
     // из контекстного меню хоста («Run snippet…»), а не отсюда.
-    fun persist(): String = manager.save(
-        SnippetDraft(
-            id = entry?.id,
-            label = label.trim(),
-            command = command,
-            // Дослать недозафиксированный черновик тега (набран, но не нажат Enter/запятая перед Save).
-            tags = (tags + parseSnippetTags(tagDraft)).distinct(),
-            shortcut = shortcut,
-        ),
-    )
+    fun persist(): String = manager.save(form.toDraft())
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Sym("code_blocks", size = 20.sp, color = D.cyanBright)
-                Txt(label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
+                Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
             }
-            if (tags.isNotEmpty()) {
+            if (form.tags.isNotEmpty()) {
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    tags.forEach { Chip("#$it") }
+                    form.tags.forEach { Chip("#$it") }
                 }
             }
         }
         HLine()
         Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
             FieldLabelSnip(stringResource(Res.string.lib_snippets_field_name))
-            SnipEditField(label, { label = it }, stringResource(Res.string.lib_snippets_ph_name), mono)
+            SnipEditField(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name), mono)
             Column(Modifier.padding(top = 20.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
-                SnipCommandField(command, { command = it }, "df -h | sort -k5 -r", mono)
+                SnipCommandField(form.command, { form.command = it }, "df -h | sort -k5 -r", mono)
             }
             Column(Modifier.padding(top = 20.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_tags))
                 // Подсказки из других сниппетов (свой исключаем: иначе только что снятый тег вернулся
                 // бы в список). Мемоизация — чтобы правка label/command не пересчитывала скан.
-                val tagSugs = remember(manager.snippets, tags, tagDraft, entry?.id) {
-                    snippetTagSuggestions(manager.snippets.filter { it.id != entry?.id }.map { it.snippet }, tags, tagDraft)
+                val tagSugs = remember(manager.snippets, form.tags, form.tagDraft, entry?.id) {
+                    snippetTagSuggestions(manager.snippets.filter { it.id != entry?.id }.map { it.snippet }, form.tags, form.tagDraft)
                 }
                 SnipTagsField(
-                    tags = tags,
-                    draft = tagDraft,
-                    onDraftChange = { v -> if (v.contains(',')) addTags(v) else tagDraft = v },
-                    onCommit = { addTags(tagDraft) },
-                    onRemove = { tag -> tags = tags - tag },
+                    tags = form.tags,
+                    draft = form.tagDraft,
+                    onDraftChange = form::updateTagDraft,
+                    onCommit = { form.addTags(form.tagDraft) },
+                    onRemove = form::removeTag,
                     suggestions = tagSugs,
-                    onPick = { tag -> tags = (tags + tag).distinct(); tagDraft = "" },
+                    onPick = form::pickTag,
                 )
             }
             Column(Modifier.padding(top = 20.dp).width(220.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
                 // Коллизию считаем по другим сниппетам (свой хоткей не конфликт): UI не даёт занять
                 // один аккорд дважды, чего [SnippetManager.forShortcut] на чтении не гарантирует.
-                val conflict = remember(manager.snippets, shortcut, entry?.id) {
-                    shortcut?.let { manager.shortcutConflict(it, entry?.id) }
+                val conflict = remember(manager.snippets, form.shortcut, entry?.id) {
+                    form.shortcut?.let { manager.shortcutConflict(it, entry?.id) }
                 }
-                ShortcutField(shortcut, mono, conflictLabel = conflict?.snippet?.label) { shortcut = it }
+                ShortcutField(form.shortcut, mono, conflictLabel = conflict?.snippet?.label) { form.shortcut = it }
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
                     stringResource(Res.string.lib_snippets_save),
-                    onClick = { if (canSave) onSaved(persist()) },
-                    enabled = canSave,
-                    bg = if (canSave) D.cyan else D.cyan.copy(alpha = 0.3f),
+                    onClick = { if (form.canSave) onSaved(persist()) },
+                    enabled = form.canSave,
+                    bg = if (form.canSave) D.cyan else D.cyan.copy(alpha = 0.3f),
                 )
                 if (entry != null) {
                     GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = D.storm, border = D.storm.copy(alpha = 0.4f))
@@ -313,13 +295,6 @@ private fun EmptyEditorHint() {
         Txt(stringResource(Res.string.lib_snippets_select_or_create), color = D.faint, size = 13.sp)
     }
 }
-
-/** Парсинг строки тегов в список: разделители — запятая/пробел/перевод строки, ведущий `#` снимаем. */
-private fun parseSnippetTags(text: String): List<String> =
-    text.split(',', ' ', '\n', '\t')
-        .map { it.trim().removePrefix("#") }
-        .filter { it.isNotEmpty() }
-        .distinct()
 
 // --- Теги чипсами (как в New connection) ---
 

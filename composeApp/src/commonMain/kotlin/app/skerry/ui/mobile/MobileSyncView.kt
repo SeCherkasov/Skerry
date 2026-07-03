@@ -97,14 +97,7 @@ import app.skerry.ui.design.Txt
 @Composable
 fun MobileSyncScreen(state: MobileDesignState) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
-            Txt(stringResource(Res.string.sync_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-        }
+        MobilePushHeader(stringResource(Res.string.sync_title), onBack = state::pop)
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(
                 stringResource(Res.string.sync_mobile_intro),

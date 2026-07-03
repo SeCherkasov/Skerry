@@ -263,7 +263,7 @@ fun PrimaryButton(
     modifier: Modifier = Modifier,
     icon: String? = null,
     bg: Color = D.cyan,
-    fg: Color = Color(0xFF0A1A26),
+    fg: Color = D.ink,
     enabled: Boolean = true,
 ) {
     Row(

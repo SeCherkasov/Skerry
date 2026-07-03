@@ -63,7 +63,6 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.MobileDesignState
-import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
@@ -75,14 +74,7 @@ import app.skerry.ui.design.Txt
 fun MobileAiScreen(state: MobileDesignState) {
     val ai = LocalAi.current
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
-            Txt(stringResource(Res.string.more_ai_privacy), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-        }
+        MobilePushHeader(stringResource(Res.string.more_ai_privacy), onBack = state::pop)
         if (ai == null) return@Column
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(

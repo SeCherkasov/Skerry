@@ -3,7 +3,6 @@ package app.skerry.ui.host
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,6 +117,8 @@ import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ModalScrim
+import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.ai.POLICY_OPTIONS
@@ -140,7 +141,6 @@ import app.skerry.ui.vault.title
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
-    val noop = remember { MutableInteractionSource() }
     val hosts = LocalHosts.current
     // Уже созданные хосты — источник подсказок для пикеров Group/Tags (в мок/превью список пуст).
     val allHosts = hosts?.hosts ?: emptyList()
@@ -175,10 +175,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
     LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase) {
         tester?.reset()
     }
-    Box(
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = noop, indication = null, onClick = state::closeModal),
-        contentAlignment = Alignment.Center,
-    ) {
+    ModalScrim(onDismiss = state::closeModal) {
         Column(
             Modifier
                 .widthIn(max = 560.dp)
@@ -188,7 +185,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(D.surfaceDeep)
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
-                .clickable(interactionSource = noop, indication = null, onClick = {}),
+                .consumeClicks(),
         ) {
             Box(Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 14.dp)) {
                 Column {
@@ -648,10 +645,7 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
     var name by remember { mutableStateOf("") }
     val canCreate = name.isNotBlank()
     Popup(alignment = Alignment.Center, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        Box(
-            Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
-            contentAlignment = Alignment.Center,
-        ) {
+        ModalScrim(onDismiss = onDismiss) {
             Column(
                 Modifier
                     .widthIn(max = 360.dp)
@@ -660,7 +654,7 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
                     .clip(RoundedCornerShape(12.dp))
                     .background(D.surfaceDeep)
                     .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+                    .consumeClicks()
                     .padding(22.dp),
             ) {
                 Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)

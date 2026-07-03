@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
-import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
@@ -65,7 +64,6 @@ import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.connection.connectionSubtitle
-import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
@@ -288,11 +286,17 @@ fun DesktopDesignApp(
         symbols = rememberMaterialSymbols(),
     )
     // Настройка показа скрытых в SFTP: держим в стейте, чтобы Ctrl+H обновлял UI мгновенно, и пишем
-    // наружу (персист) при каждом изменении.
+    // наружу (персист) при каждом изменении. remember обязателен (как terminalAppearance ниже):
+    // LocalSftpPrefs — staticCompositionLocalOf, и новый инстанс на каждой рекомпозиции форсил бы
+    // полный пересбор поддерева потребителей. Колбэк персиста — через rememberUpdatedState, чтобы
+    // лямбда внутри remember всегда звала свежий onSftpShowHiddenChange.
     var sftpShowHidden by remember { mutableStateOf(initialSftpShowHidden) }
-    val sftpPrefs = SftpPrefs(sftpShowHidden) { value ->
-        sftpShowHidden = value
-        onSftpShowHiddenChange(value)
+    val sftpShowHiddenWriter = rememberUpdatedState(onSftpShowHiddenChange)
+    val sftpPrefs = remember(sftpShowHidden) {
+        SftpPrefs(sftpShowHidden) { value ->
+            sftpShowHidden = value
+            sftpShowHiddenWriter.value(value)
+        }
     }
     // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
     // из живого транспорта — один shell на вкладку, как в [app.skerry.ui.mobile.MobileApp]. Свой
@@ -434,68 +438,45 @@ private fun DesktopChrome(
         state.loadCustomGroups(customGroupsProvider())
     }
 
-    // Хост, для которого нет привязанного секрета → спрашиваем пароль перед подключением.
-    var pendingHost by remember { mutableStateOf<Host?>(null) }
-    // То же, но подключение пойдёт в split-панель целевой вкладки (а не новой вкладкой). Целевую
-    // вкладку фиксируем в момент выбора хоста, а не submit — иначе при переключении вкладок во время
-    // ввода пароля split откроется не там, где его запросили.
-    var pendingSplitHost by remember { mutableStateOf<Host?>(null) }
-    var pendingSplitParent by remember { mutableStateOf<String?>(null) }
+    // Хост без привязанного секрета → спрашиваем пароль перед подключением. Единое состояние на все
+    // три пути ([PendingAuth]): новая вкладка / split (целевую вкладку фиксируем в момент выбора
+    // хоста, а не submit — иначе при переключении вкладок во время ввода пароля split откроется не
+    // там, где его запросили) / «Run on host» сниппета (помним и команду).
+    var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
 
-    // «Run on host» сниппета без привязанного секрета → спрашиваем пароль, запоминая И команду, чтобы
-    // после ввода открыть сессию к хосту и выполнить её там (см. runSnippetOnHost / DesktopPasswordDialog).
-    var pendingSnippetHost by remember { mutableStateOf<Host?>(null) }
-    var pendingSnippetCommand by remember { mutableStateOf("") }
-
-    // Стабильная лямбда коннекта: без remember она пересоздавалась бы на каждой рекомпозиции и,
-    // уходя в staticCompositionLocalOf, инвалидировала бы всех потребителей [LocalConnectHost].
-    // Резолв одноуровневый: хост → keychain-секрет по credentialId → SshAuth; нет привязки → пароль.
-    val connectHost = remember(sessions, credentials, state) {
-        { host: Host ->
-            val credential = credentials?.find(host.credentialId)
-            when {
-                // Telnet/Serial без аутентификации — коннектим сразу, без запроса пароля (auth игнорируется).
-                host.connectionType != ConnectionType.SSH -> openHostSession(sessions, state, host, SshAuth.Password(""))
-                credential != null -> openHostSession(sessions, state, host, credential.toSshAuth())
-                else -> pendingHost = host
-            }
+    // Единый диспетчер подключения с готовой аутентификацией: куда идёт сессия — по типу [PendingAuth].
+    fun openResolved(target: PendingAuth, auth: SshAuth) {
+        when (target) {
+            is PendingAuth.NewTab -> openHostSession(sessions, state, target.host, auth)
+            is PendingAuth.Split -> openSplitSession(sessions, state, target.parentId, target.host, auth)
+            is PendingAuth.Snippet ->
+                openHostSession(sessions, state, target.host, auth) { it.send(target.command + "\n") }
         }
     }
 
-    // «Run on host» сниппета: открыть сессию к хосту и выполнить команду после подключения. Резолв
-    // секрета как у connectHost; без привязки — запрос пароля с сохранённой командой.
-    val runSnippetOnHost = remember(sessions, credentials, state) {
-        { host: Host, command: String ->
-            val credential = credentials?.find(host.credentialId)
-            when {
-                host.connectionType != ConnectionType.SSH ->
-                    openHostSession(sessions, state, host, SshAuth.Password("")) { it.send(command + "\n") }
-                credential != null ->
-                    openHostSession(sessions, state, host, credential.toSshAuth()) { it.send(command + "\n") }
-                else -> {
-                    pendingSnippetHost = host
-                    pendingSnippetCommand = command
-                }
-            }
+    // Общий шаг всех трёх путей: резолв аутентификации ([resolveHostAuth]) → сразу подключить либо
+    // спросить пароль, запомнив цель.
+    fun connectOrAsk(target: PendingAuth) {
+        when (val resolution = resolveHostAuth(target.host, credentials)) {
+            is HostAuthResolution.Resolved -> openResolved(target, resolution.auth)
+            HostAuthResolution.NeedsPassword -> pendingAuth = target
         }
+    }
+
+    // Стабильные лямбды коннекта: без remember они пересоздавались бы на каждой рекомпозиции и,
+    // уходя в staticCompositionLocalOf, инвалидировали бы всех потребителей [LocalConnectHost] и др.
+    val connectHost = remember(sessions, credentials, state) {
+        { host: Host -> connectOrAsk(PendingAuth.NewTab(host)) }
+    }
+
+    // «Run on host» сниппета: открыть сессию к хосту и выполнить команду после подключения.
+    val runSnippetOnHost = remember(sessions, credentials, state) {
+        { host: Host, command: String -> connectOrAsk(PendingAuth.Snippet(host, command)) }
     }
 
     // Тот же резолв, но в split-панель активной вкладки (новая независимая вторичная сессия).
     val connectSplitHost = remember(sessions, credentials, state) {
-        { host: Host ->
-            val parentId = sessions?.activeId
-            val credential = credentials?.find(host.credentialId)
-            when {
-                host.connectionType != ConnectionType.SSH ->
-                    openSplitSession(sessions, state, parentId, host, SshAuth.Password(""))
-                credential != null ->
-                    openSplitSession(sessions, state, parentId, host, credential.toSshAuth())
-                else -> {
-                    pendingSplitHost = host
-                    pendingSplitParent = parentId
-                }
-            }
-        }
+        { host: Host -> connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
     }
 
     // Лок vault должен снять все активные туннели: их соединения держат расшифрованный секрет, и после
@@ -505,15 +486,13 @@ private fun DesktopChrome(
     // Лок снимает активные туннели (их соединения держат расшифрованный секрет — zero-knowledge), но
     // СЕССИИ ВКЛАДОК (включая split) намеренно ПЕРЕЖИВАЮТ lock: после разблокировки терминалы на месте.
     // Висящие диалоги запроса пароля сбрасываем (не оставлять ввод пароля под lock-экраном).
-    val onLockWithTunnels = onLock?.let { lock ->
+    // Стабилизируем как onRootKey ниже: лямбда уходит в TitleBar и lockAction, и без remember новый
+    // инстанс на каждой рекомпозиции заставлял бы их перевычисляться впустую.
+    val onLockWithTunnels: (() -> Unit)? = if (onLock == null) null else remember(onLock, tunnels, sessions, state) {
         {
-            pendingHost = null
-            pendingSplitHost = null
-            pendingSplitParent = null
-            pendingSnippetHost = null
-            pendingSnippetCommand = ""
+            pendingAuth = null
             // Висящее подтверждение разрыва/закрытия сбрасываем тоже — после unlock действие требует
-            // свежего намерения пользователя (как pendingHost), а не «всплывает» поверх.
+            // свежего намерения пользователя (как pendingAuth), а не «всплывает» поверх.
             state.dismissClose()
             tunnels?.closeAll()
             // Сессии переживают lock (открытый сокет жить остаётся), но авто-реконнект после lock
@@ -523,7 +502,7 @@ private fun DesktopChrome(
                 s.controller.clearReconnectCredentials()
                 s.splitSession?.controller?.clearReconnectCredentials()
             }
-            lock()
+            onLock()
         }
     }
 
@@ -540,8 +519,7 @@ private fun DesktopChrome(
         // редактора сниппета (Command/ShortcutField) или New connection, ушёл бы командой в терминал.
         val snippets = LocalSnippets.current
         // Живой lock (сбрасывает туннели/учётки) на живом пути; state.lock — мок/превью. Через
-        // rememberUpdatedState, чтобы держать onRootKey стабильным (onLockWithTunnels — новая лямбда
-        // на каждую рекомпозицию), не пересоздавая обработчик впустую.
+        // rememberUpdatedState, чтобы onRootKey не зависел от смены самой лямбды блокировки.
         val lockAction = rememberUpdatedState(onLockWithTunnels ?: state::lock)
         // Глобальные хоткеи каркаса (⌘/Ctrl+Shift — New conn/Split/SFTP/AI-bar/Lock, Ctrl+Tab —
         // соседняя вкладка, Alt+цифра — вкладка по номеру) проверяются ПЕРЕД хоткеем сниппета. Тот же
@@ -581,32 +559,15 @@ private fun DesktopChrome(
             // Диалог «Link a device»: показывает QR/код быстрого паринга для нового устройства.
             LocalSync.current?.let { if (state.pairingOpen) PairingShowDialog(it, onDismiss = state::closePairing) }
             if (onLock == null && state.locked) LockScreen(state)
-            pendingHost?.let { host ->
+            // Один диалог запроса пароля на все три пути подключения; после submit цель ([PendingAuth])
+            // диспетчеризуется тем же openResolved, что и путь с привязанным секретом.
+            pendingAuth?.let { pending ->
                 DesktopPasswordDialog(
-                    host = host,
-                    onDismiss = { pendingHost = null },
-                    onConnect = { pw -> pendingHost = null; openHostSession(sessions, state, host, SshAuth.Password(pw)) },
-                )
-            }
-            pendingSplitHost?.let { host ->
-                DesktopPasswordDialog(
-                    host = host,
-                    onDismiss = { pendingSplitHost = null; pendingSplitParent = null },
+                    host = pending.host,
+                    onDismiss = { pendingAuth = null },
                     onConnect = { pw ->
-                        val parentId = pendingSplitParent
-                        pendingSplitHost = null; pendingSplitParent = null
-                        openSplitSession(sessions, state, parentId, host, SshAuth.Password(pw))
-                    },
-                )
-            }
-            pendingSnippetHost?.let { host ->
-                DesktopPasswordDialog(
-                    host = host,
-                    onDismiss = { pendingSnippetHost = null; pendingSnippetCommand = "" },
-                    onConnect = { pw ->
-                        val command = pendingSnippetCommand
-                        pendingSnippetHost = null; pendingSnippetCommand = ""
-                        openHostSession(sessions, state, host, SshAuth.Password(pw)) { it.send(command + "\n") }
+                        pendingAuth = null
+                        openResolved(pending, SshAuth.Password(pw))
                     },
                 )
             }
@@ -671,6 +632,24 @@ private fun DesktopChrome(
             }
         }
     }
+}
+
+/**
+ * Отложенное подключение, ждущее ввода пароля (SSH-хост без привязанного секрета), — и одновременно
+ * адрес доставки готовой аутентификации: новая вкладка, split-панель конкретной вкладки или запуск
+ * команды сниппета на хосте.
+ */
+private sealed interface PendingAuth {
+    val host: Host
+
+    /** Подключение новой вкладкой (или в активную пустую). */
+    data class NewTab(override val host: Host) : PendingAuth
+
+    /** Подключение в split-панель вкладки [parentId] (фиксируется в момент выбора хоста). */
+    data class Split(override val host: Host, val parentId: String?) : PendingAuth
+
+    /** Открыть сессию к хосту и выполнить [command] после подключения. */
+    data class Snippet(override val host: Host, val command: String) : PendingAuth
 }
 
 /**
@@ -920,7 +899,7 @@ private fun SessionTabChip(
                 when {
                     active -> D.cyan10
                     hovered -> Color(0x1FFFFFFF)
-                    else -> Color(0x08FFFFFF)
+                    else -> D.card
                 },
             )
             .border(1.dp, if (active) D.cyan20 else D.line, shape)
@@ -984,7 +963,7 @@ private fun IconRail(state: DesktopDesignState) {
             else item.view == currentSessionView
             RailButton(
                 icon = item.icon,
-                label = item.label,
+                label = stringResource(item.label),
                 active = active,
                 onClick = {
                     // App-level (Vault/Known/Teams/Snippets) → оверлей. Session-level: в живом режиме
@@ -1063,7 +1042,7 @@ private fun StatusBar() {
         Modifier
             .fillMaxWidth()
             .height(26.dp)
-            .background(Color(0xFF0A1A26))
+            .background(D.ink)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,

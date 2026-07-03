@@ -116,7 +116,7 @@ fun MobileHostsScreen(state: MobileDesignState) {
             if (folderLineIndex != null && folderLineIndex == otherFolders.size) MobileDropLine()
             Spacer(Modifier.height(96.dp)) // место под таб-бар и FAB
         }
-        HostsFab(
+        MobileFabButton(
             onClick = state::openNewConn,
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
         )
@@ -233,7 +233,7 @@ private fun HostsHeader(onAvatar: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Txt(stringResource(Res.string.shell_hosts), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+        MobileScreenTitle(stringResource(Res.string.shell_hosts))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // Индикатор sync по статусу сессии (см. syncIndicator), не только по доступности сервера:
             // «paused/error» при отсутствии рабочей сессии, а не ложно-зелёный online.
@@ -250,7 +250,7 @@ private fun HostsHeader(onAvatar: () -> Unit) {
                 Modifier.size(34.dp).clip(CircleShape).background(D.cyan).clickable(onClick = onAvatar),
                 contentAlignment = Alignment.Center,
             ) {
-                Sym("person", size = 19.sp, color = Color(0xFF0A1A26))
+                Sym("person", size = 19.sp, color = D.ink)
             }
         }
     }
@@ -402,7 +402,7 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0x08FFFFFF))
+            .background(D.card)
             .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -434,21 +434,3 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
     }
 }
 
-/** Плавающая кнопка добавления подключения (открывает лист New connection). */
-@Composable
-private fun HostsFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(D.cyan)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Sym("add", size = 28.sp, color = Color(0xFF0A1A26))
-    }
-}

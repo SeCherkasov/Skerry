@@ -51,6 +51,9 @@ import app.skerry.ui.generated.resources.more_ai_privacy
 import app.skerry.ui.generated.resources.more_ai_subtitle_byok
 import app.skerry.ui.generated.resources.more_ai_subtitle_local
 import app.skerry.ui.generated.resources.more_appearance_subtitle
+import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
+import app.skerry.ui.generated.resources.more_biometric_prompt_subtitle
+import app.skerry.ui.generated.resources.more_biometric_prompt_title
 import app.skerry.ui.generated.resources.more_known_hosts
 import app.skerry.ui.generated.resources.more_lock
 import app.skerry.ui.generated.resources.more_port_forwarding
@@ -134,7 +137,7 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
     val preview = onLock == null
     Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
-            Txt(stringResource(Res.string.more_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+            MobileScreenTitle(stringResource(Res.string.more_title))
         }
         if (preview) MockProfileCard() else LocalVaultCard()
 
@@ -222,13 +225,6 @@ private fun MoreRow(
     if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
 }
 
-/** Промпт включения биометрии для vault (англоязычный — под мобильный UI). */
-private val MOBILE_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
-    title = "Enable biometric unlock",
-    cancelLabel = "Cancel",
-    subtitle = "Confirm your biometrics to unlock Skerry without typing the master password.",
-)
-
 // Security (push-экран More → Безопасность).
 
 /**
@@ -254,14 +250,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
 
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
-                Txt(stringResource(Res.string.settings_security_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            }
+            MobilePushHeader(stringResource(Res.string.settings_security_title), onBack = state::pop)
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
                 Txt(stringResource(Res.string.settings_security_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
 
@@ -288,6 +277,12 @@ fun MobileSecurityScreen(state: MobileDesignState) {
 
                 // Разблокировка биометрией: строка только когда фактор доступен (иначе настраивать нечего).
                 if (controller != null && controller.canEnableBiometric()) {
+                    // Строки промпта резолвим в composable-scope (stringResource нельзя в onToggle-лямбде).
+                    val enablePrompt = BiometricPrompt(
+                        title = stringResource(Res.string.more_biometric_prompt_title),
+                        cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
+                        subtitle = stringResource(Res.string.more_biometric_prompt_subtitle),
+                    )
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Txt(stringResource(Res.string.settings_security_touch_id), color = D.text, size = 14.5.sp)
@@ -299,7 +294,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                                 if (controller.biometricInFlight) return@Toggle
                                 scope.launch {
                                     if (controller.biometricEnabled) controller.disableBiometric()
-                                    else controller.enableBiometric(MOBILE_ENABLE_BIOMETRIC_PROMPT)
+                                    else controller.enableBiometric(enablePrompt)
                                     reload++
                                 }
                             },
@@ -393,14 +388,7 @@ private fun MobileAutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDur
 @Composable
 fun MobileAppearanceScreen(state: MobileDesignState) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
-            Txt(stringResource(Res.string.appearance_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-        }
+        MobilePushHeader(stringResource(Res.string.appearance_title), onBack = state::pop)
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(stringResource(Res.string.appearance_section_terminal), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
             // Карточки тем сеткой 2×N из каталога [TerminalThemes]; выбор проводится в терминал на лету.
@@ -673,14 +661,14 @@ private fun ProfileCard(initials: String, avatarBg: Color, title: String, subtit
             .padding(bottom = 18.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0x08FFFFFF))
+            .background(D.card)
             .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
         Box(Modifier.size(46.dp).clip(CircleShape).background(avatarBg), contentAlignment = Alignment.Center) {
-            Txt(initials, color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+            Txt(initials, color = D.ink, size = 16.sp, weight = FontWeight.Bold)
         }
         Column(Modifier.weight(1f)) {
             Txt(title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold)

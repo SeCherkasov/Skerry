@@ -45,9 +45,12 @@ import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.tunnel.TunnelEntry
+import app.skerry.ui.tunnel.TunnelFormState
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.TunnelStatus
-import app.skerry.ui.tunnel.buildTunnelDraft
+import app.skerry.ui.tunnel.badgeColors
+import app.skerry.ui.tunnel.badgeLabel
+import app.skerry.ui.tunnel.displayLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_add_tunnel_below
 import app.skerry.ui.generated.resources.ports_changes_apply_after_restart
@@ -85,9 +88,6 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 
-/** Фон карточки туннеля (белый 3%). */
-private val TunnelCardBg = Color(0x08FFFFFF)
-
 /**
  * Push-экран Port forwarding: шапка-назад + карточки сохранённых туннелей + кнопка New tunnel.
  * Туннели — ГЛОБАЛЬНЫЙ раздел: список и включение/выключение идут через [TunnelManager]
@@ -106,7 +106,7 @@ fun MobilePortsScreen(state: MobileDesignState) {
     var editorFor by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
-            MobilePortsHeader(onBack = state::pop)
+            MobilePushHeader(stringResource(Res.string.ports_port_forwarding), onBack = state::pop, plainBack = true)
             if (manager == null) {
                 MockMobilePortsBody(mono)
             } else {
@@ -128,28 +128,6 @@ fun MobilePortsScreen(state: MobileDesignState) {
                 onDismiss = { editorFor = null },
             )
         }
-    }
-}
-
-/** Шапка push-экрана: chevron_left (назад) + «Port forwarding». */
-@Composable
-private fun MobilePortsHeader(onBack: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Sym(
-            "chevron_left",
-            size = 27.sp,
-            color = D.cyanBright,
-            modifier = Modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onBack,
-            ),
-        )
-        Txt(stringResource(Res.string.ports_port_forwarding), color = D.text, size = 18.sp, weight = FontWeight.Bold)
     }
 }
 
@@ -219,20 +197,20 @@ private fun LiveTunnelCard(
 ) {
     var menuOpen by remember(entry.id) { mutableStateOf(false) }
     val t = entry.tunnel
-    val (bg, fg) = tunnelBadgeColors(t.direction)
+    val (bg, fg) = t.direction.badgeColors()
     val dim = entry.status !is TunnelStatus.Active
     val port = (entry.status as? TunnelStatus.Active)?.boundPort ?: t.bindPort
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(TunnelCardBg)
+            .background(D.card)
             .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Badge(directionBadge(t.direction), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
+            Badge(t.direction.badgeLabel(), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
             Txt(stringResource(Res.string.ports_via, via), color = D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
             TunnelStatusControl(entry, onToggle)
         }
@@ -286,7 +264,7 @@ private fun MobileEmptyTunnels() {
 
 /**
  * Нижний лист создания/правки туннеля в идиоме листа New connection (sheet): имя, тип, via-host (пикер
- * сохранённых хостов), bind и dest. Save собирает [buildTunnelDraft] и пишет через [TunnelManager];
+ * сохранённых хостов), bind и dest. Save собирает [TunnelFormState.draft] и пишет через [TunnelManager];
  * для существующего показан Remove. Поля сидируются из [existing] при открытии.
  */
 @Composable
@@ -298,22 +276,14 @@ private fun MobileTunnelEditorSheet(
     onDismiss: () -> Unit,
 ) {
     val editingId = existing?.id
-    val seed = existing?.tunnel
-    // Ключ = editingId: поля — изолированный буфер правки, заполняется один раз на выбранный туннель.
+    // Ключ = editingId: форма — изолированный буфер правки, заполняется один раз на выбранный туннель.
     // Мутации entry.tunnel в обход (save из другого места для того же id) сюда намеренно НЕ долетают.
-    var label by remember(editingId) { mutableStateOf(seed?.label ?: "") }
-    var direction by remember(editingId) { mutableStateOf(seed?.direction ?: TunnelDirection.Local) }
-    var hostId by remember(editingId) { mutableStateOf(seed?.hostId) }
-    var bindHost by remember(editingId) { mutableStateOf(seed?.bindHost ?: "127.0.0.1") }
-    var bindPort by remember(editingId) { mutableStateOf(seed?.bindPort?.toString() ?: "") }
-    var destHost by remember(editingId) { mutableStateOf(seed?.destHost ?: "") }
-    var destPort by remember(editingId) { mutableStateOf(seed?.destPort?.toString() ?: "") }
+    val form = remember(editingId) { TunnelFormState.fromEntry(existing) }
 
-    val isDynamic = direction == TunnelDirection.Dynamic
-    val draft = buildTunnelDraft(editingId, label, hostId, direction, bindHost, bindPort, destHost, destPort)
-    val (badgeBg, badgeFg) = tunnelBadgeColors(direction)
+    val draft = form.draft
+    val (badgeBg, badgeFg) = form.direction.badgeColors()
     val hostList = hosts?.hosts ?: emptyList()
-    val hostName = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
+    val hostName = form.hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
 
     MobileBottomSheet(
         onDismiss = onDismiss,
@@ -323,7 +293,7 @@ private fun MobileTunnelEditorSheet(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 9.5.sp)
+                    Badge(form.direction.badgeLabel(), bg = badgeBg, fg = badgeFg, radius = 4, size = 9.5.sp)
                     Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_edit_tunnel), color = D.text, size = 20.sp, weight = FontWeight.Bold)
                 }
                 Sym(
@@ -338,21 +308,21 @@ private fun MobileTunnelEditorSheet(
                 )
             }
             Spacer(Modifier.height(18.dp))
-            PortField(stringResource(Res.string.ports_field_name)) { PortInput(label, { label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono) }
+            PortField(stringResource(Res.string.ports_field_name)) { PortInput(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono) }
             Spacer(Modifier.height(14.dp))
-            PortField(stringResource(Res.string.ports_field_type)) { PortTypeSelect(direction) { direction = it } }
+            PortField(stringResource(Res.string.ports_field_type)) { PortTypeSelect(form.direction) { form.direction = it } }
             Spacer(Modifier.height(14.dp))
-            PortField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { hostId = it } }
+            PortField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { form.hostId = it } }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PortField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(bindHost, { bindHost = it }, "127.0.0.1", mono) }
-                PortField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(bindPort, { bindPort = it }, "8080", mono, KeyboardType.Number) }
+                PortField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono) }
+                PortField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.bindPort, { form.bindPort = it }, "8080", mono, KeyboardType.Number) }
             }
-            if (!isDynamic) {
+            if (!form.isDynamic) {
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PortField(stringResource(Res.string.ports_field_destination), Modifier.weight(1f)) { PortInput(destHost, { destHost = it }, "10.0.0.5", mono) }
-                    PortField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(destPort, { destPort = it }, "80", mono, KeyboardType.Number) }
+                    PortField(stringResource(Res.string.ports_field_destination), Modifier.weight(1f)) { PortInput(form.destHost, { form.destHost = it }, "10.0.0.5", mono) }
+                    PortField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.destPort, { form.destPort = it }, "80", mono, KeyboardType.Number) }
                 }
             } else {
                 Spacer(Modifier.height(10.dp))
@@ -388,7 +358,7 @@ private fun MobileTunnelEditorSheet(
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.ports_save_tunnel), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.ports_save_tunnel), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
             }
             if (existing != null) {
                 Spacer(Modifier.height(12.dp))
@@ -442,18 +412,6 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
     )
 }
 
-private fun directionDisplay(direction: TunnelDirection): String = when (direction) {
-    TunnelDirection.Local -> "Local forward (-L)"
-    TunnelDirection.Remote -> "Remote forward (-R)"
-    TunnelDirection.Dynamic -> "Dynamic SOCKS (-D)"
-}
-
-private fun directionBadge(direction: TunnelDirection): String = when (direction) {
-    TunnelDirection.Local -> "LOCAL"
-    TunnelDirection.Remote -> "REMOTE"
-    TunnelDirection.Dynamic -> "SOCKS"
-}
-
 /** Подпись поля (капс) + содержимое — идиома полей листа New connection. */
 @Composable
 private fun PortField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
@@ -499,7 +457,7 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(directionDisplay(direction), color = D.text, size = 15.sp)
+                Txt(direction.displayLabel(), color = D.text, size = 15.sp)
                 Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
             }
         },
@@ -509,7 +467,7 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
             ) {
                 listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
                     Txt(
-                        directionDisplay(option),
+                        option.displayLabel(),
                         color = if (option == direction) D.cyanBright else D.text,
                         size = 15.sp,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 14.dp, vertical = 11.dp),
@@ -552,12 +510,6 @@ private fun MobileThroughputRow(icon: String, color: Color, fraction: Float, val
     }
 }
 
-private fun tunnelBadgeColors(direction: TunnelDirection): Pair<Color, Color> = when (direction) {
-    TunnelDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
-    TunnelDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
-    TunnelDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
-}
-
 // Мок (превью/офскрин).
 
 private data class MockTunnel(val type: String, val bg: Color, val fg: Color, val via: String, val source: String, val arrow: String, val dest: String, val destDim: Boolean, val on: Boolean)
@@ -587,7 +539,7 @@ private fun MockTunnelCard(t: MockTunnel, mono: FontFamily) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(TunnelCardBg)
+            .background(D.card)
             .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {

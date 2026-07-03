@@ -108,6 +108,10 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
+import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.terminal_reverse_search_no_matches
+import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
 import app.skerry.ui.theme.SkerryColors
 
 /** Порог между кликами (мс), в пределах которого они складываются в двойной/тройной. */
@@ -345,6 +349,13 @@ fun TerminalScreen(
     // при смене базового стиля или палитры (OSC 4/104) — от них зависит результат.
     val glyphStyleCache = remember(textStyle, state.palette, termTheme) { HashMap<TermStyle, TextStyle>() }
 
+    // Производные от textStyle стили считаем один раз на смену шрифта/темы, а не в draw-фазе:
+    // курсорный оверлей перерисовывается каждый полупериод мигания, и copy() там аллоцировал бы
+    // новый TextStyle на каждый кадр; то же для «призрака» подсказки и невидимой Text-подложки.
+    val structuralStyle = remember(textStyle) { textStyle.copy(color = Color.Transparent) }
+    val cursorGlyphStyle = remember(textStyle, termTheme) { textStyle.copy(color = cursorFg) }
+    val ghostStyle = remember(textStyle) { textStyle.copy(color = Color(0x66E6F2FA)) }
+
     // PathEffect для пунктирного/штрихового подчёркивания зависит только от высоты клетки (константа при
     // фиксированном шрифте) — считаем один раз, а не на каждый подчёркнутый ран в draw-фазе.
     val underlineEffects = remember(metrics) {
@@ -384,11 +395,6 @@ fun TerminalScreen(
         button, type, posAt(x, y), shift, alt, ctrl,
         x.toInt().coerceAtLeast(0), y.toInt().coerceAtLeast(0),
     )
-
-    // Якорь границы выделения в координатах контента (нижний угол ячейки) — арифметика, совпадающая
-    // с сеткой глифов. Канвас маркеров рисует с поправкой на прокрутку.
-    fun handleAnchor(pos: TerminalPos): Offset =
-        Offset(pos.col * metrics.cellWidth, (pos.row + 1) * metrics.cellHeight)
 
     // try/catch на каждую буферную корутину: scope из rememberCoroutineScope несёт обычный Job (не
     // Supervisor), поэтому необработанное исключение в одной операции отменило бы весь scope и убило бы
@@ -560,7 +566,7 @@ fun TerminalScreen(
       }
       Text(
         text = structural,
-        style = textStyle.copy(color = Color.Transparent),
+        style = structuralStyle,
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scroll)
@@ -648,7 +654,9 @@ fun TerminalScreen(
             // mouse-tracking (less/man) — стрелки (3 строки за «щелчок»), т.к. своего scrollback нет.
             // Перехватываем в Initial-проходе и гасим событие, чтобы verticalScroll не дёргал scrollback;
             // иначе (основной буфер, без репортинга) пропускаем — колесо листает scrollback штатно.
-            .pointerInput(state, closed) {
+            // metrics в ключах: reportMouseAt считает ячейку по геометрии, захваченной на старте
+            // цикла, — без перезапуска после смены кегля координаты считались бы по старой сетке.
+            .pointerInput(state, closed, metrics) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -675,7 +683,7 @@ fun TerminalScreen(
             // внутри encodeMouseReport). Движение с ЗАЖАТОЙ кнопкой — это Drag, его репортят жестовые
             // циклы ниже (левая — awaitEachGesture, средняя/правая — сырой обработчик), поэтому здесь
             // глушим события с любой зажатой кнопкой, иначе один кадр движения уйдёт и как Move, и как Drag.
-            .pointerInput(state, closed) {
+            .pointerInput(state, closed, metrics) {
                 var lastHover: TerminalPos? = null
                 awaitPointerEventScope {
                     while (true) {
@@ -695,7 +703,7 @@ fun TerminalScreen(
             // (левую) кнопку, поэтому средний/правый клик ловим здесь на сырых событиях. При активном
             // mouse-tracking — репортим press/release приложению; иначе средний = вставка (PRIMARY-
             // выделение X11 c откатом на буфер), правый = КОПИРОВАТЬ текущее выделение в буфер.
-            .pointerInput(state, closed) {
+            .pointerInput(state, closed, metrics) {
                 var reported: MouseButton? = null
                 var lastPos: TerminalPos? = null
                 awaitPointerEventScope {
@@ -830,18 +838,10 @@ fun TerminalScreen(
                         // Тач: сначала — попал ли палец в маркер уже существующего выделения.
                         // Если да, перетаскиваем эту границу (вторую держим) — корректировка краёв,
                         // как в мессенджерах; по окончании обновляем меню «Copy».
+                        // Якоря маркеров и down.position — в одной системе координат контента
+                        // (pointerInput стоит после verticalScroll/padding), поэтому сравниваем напрямую.
                         val sel = state.selection
-                        val handle = if (sel != null && !sel.isEmpty) {
-                            // Якоря маркеров и down.position — в одной системе координат контента
-                            // (pointerInput стоит после verticalScroll/padding), поэтому сравниваем напрямую.
-                            val ds = (down.position - handleAnchor(sel.start)).getDistance()
-                            val de = (down.position - handleAnchor(sel.end)).getDistance()
-                            when {
-                                ds <= handleTouchRadiusPx && ds <= de -> SelectionHandle.START
-                                de <= handleTouchRadiusPx -> SelectionHandle.END
-                                else -> null
-                            }
-                        } else null
+                        val handle = sel?.let { hitTestSelectionHandle(down.position, it, metrics, handleTouchRadiusPx) }
                         if (handle != null) {
                             drag(down.id) { change ->
                                 change.consume()
@@ -893,7 +893,7 @@ fun TerminalScreen(
                   CursorShape.Block -> {
                       drawRect(cursorBg, topLeft = Offset(x, y), size = Size(metrics.cellWidth, metrics.cellHeight))
                       if (!glyph.isNullOrBlank()) {
-                          drawText(measurer, glyph, topLeft = Offset(x, y), style = textStyle.copy(color = cursorFg))
+                          drawText(measurer, glyph, topLeft = Offset(x, y), style = cursorGlyphStyle)
                       }
                   }
                   CursorShape.Underline -> drawRect(
@@ -918,7 +918,7 @@ fun TerminalScreen(
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
               val x = cursorCol * metrics.cellWidth
               val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
-              drawText(measurer, ghost, topLeft = Offset(x, y), style = textStyle.copy(color = Color(0x66E6F2FA)))
+              drawText(measurer, ghost, topLeft = Offset(x, y), style = ghostStyle)
           }
       }
 
@@ -936,11 +936,11 @@ fun TerminalScreen(
                   .padding(horizontal = 10.dp, vertical = 6.dp),
           ) {
               Text(
-                  text = "(reverse-i-search)`$rsQuery`:  ↑↓ выбрать · Enter вставить · Del убрать · Esc",
+                  text = stringResource(Res.string.terminal_reverse_search_prompt, rsQuery),
                   style = textStyle.copy(color = Color(0xFF8AA0AE)),
               )
               if (shown.isEmpty()) {
-                  Text("— нет совпадений —", style = textStyle.copy(color = Color(0xFF5B6B77)))
+                  Text(stringResource(Res.string.terminal_reverse_search_no_matches), style = textStyle.copy(color = Color(0xFF5B6B77)))
               } else {
                   shown.forEachIndexed { i, cmd ->
                       val selected = i == state.reverseSearchIndex.mod(matches.size.coerceAtLeast(1))
@@ -962,9 +962,9 @@ fun TerminalScreen(
       // чтобы маркеры держались на границах выделения при скролле. На мыши (desktop) их нет.
       if (imeInput && !closed) {
           val sel = state.selection
-          val startAnchor = sel?.takeIf { !it.isEmpty }?.let { handleAnchor(it.start) }
-          val endAnchor = sel?.takeIf { !it.isEmpty }?.let { handleAnchor(it.end) }
-          if (startAnchor != null && endAnchor != null) {
+          val anchors = sel?.takeIf { !it.isEmpty }?.let { selectionHandleAnchors(it, metrics) }
+          if (anchors != null) {
+              val (startAnchor, endAnchor) = anchors
               Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
                   val dy = -scroll.value.toFloat()
                   drawSelectionHandle(startAnchor.copy(y = startAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.START, handleColor)

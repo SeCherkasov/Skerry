@@ -96,23 +96,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
     val host = id?.let { controller?.find(it) ?: MOBILE_PREVIEW_HOSTS.firstOrNull { h -> h.id == it } }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Sym(
-                "chevron_left",
-                size = 27.sp,
-                color = D.cyanBright,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = state::pop,
-                ),
-            )
-            Txt(stringResource(Res.string.shell_host), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-        }
+        MobilePushHeader(stringResource(Res.string.shell_host), onBack = state::pop, plainBack = true)
 
         if (host == null) {
             Txt(
@@ -164,8 +148,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {
-                Sym("terminal", size = 21.sp, color = Color(0xFF0A1A26))
-                Txt(stringResource(Res.string.shell_connect), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Sym("terminal", size = 21.sp, color = D.ink)
+                Txt(stringResource(Res.string.shell_connect), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
             }
         }
 
@@ -187,7 +171,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             Modifier
                 .padding(horizontal = 18.dp)
                 .clip(RoundedCornerShape(13.dp))
-                .background(Color(0x08FFFFFF))
+                .background(D.card)
                 .border(1.dp, D.cyan.copy(alpha = 0.07f), RoundedCornerShape(13.dp)),
         ) {
             val rows = mobileHostDetailRows(host)
@@ -256,7 +240,7 @@ private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick
     Column(
         modifier
             .clip(RoundedCornerShape(13.dp))
-            .background(Color(0x08FFFFFF))
+            .background(D.card)
             .border(1.dp, D.cyan08, RoundedCornerShape(13.dp))
             .then(
                 if (onClick != null) {

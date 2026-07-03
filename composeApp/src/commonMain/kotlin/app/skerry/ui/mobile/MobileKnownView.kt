@@ -51,9 +51,6 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
-/** Фон строки доверенного ключа (белый 3%). */
-private val KnownRowBg = Color(0x08FFFFFF)
-
 /**
  * Push-экран Known hosts: шапка-назад + баннеры смены ключа (Accept/Reject прямо в баннере — на
  * телефоне нет боковой панели сравнения отпечатков desktop-`KnownHostsView`) + список доверенных
@@ -65,33 +62,11 @@ private val KnownRowBg = Color(0x08FFFFFF)
 fun MobileKnownScreen(state: MobileDesignState) {
     val mono = LocalFonts.current.mono
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        MobileKnownHeader(onBack = state::pop)
+        MobilePushHeader(stringResource(Res.string.lib_known_title), onBack = state::pop, plainBack = true)
         when (val controller = LocalKnownHosts.current) {
             null -> MockMobileKnownBody(mono)
             else -> LiveMobileKnownBody(controller, mono)
         }
-    }
-}
-
-/** Шапка push-экрана: chevron_left (назад) + «Known hosts». */
-@Composable
-private fun MobileKnownHeader(onBack: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Sym(
-            "chevron_left",
-            size = 27.sp,
-            color = D.cyanBright,
-            modifier = Modifier.clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onBack,
-            ),
-        )
-        Txt(stringResource(Res.string.lib_known_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
     }
 }
 
@@ -266,7 +241,7 @@ private fun KnownRowContent(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (changed) D.sunset.copy(alpha = 0.05f) else KnownRowBg)
+            .background(if (changed) D.sunset.copy(alpha = 0.05f) else D.card)
             .border(1.dp, if (changed) D.sunset.copy(alpha = 0.2f) else D.cyan08, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

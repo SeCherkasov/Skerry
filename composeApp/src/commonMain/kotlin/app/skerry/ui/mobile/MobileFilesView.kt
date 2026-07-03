@@ -467,7 +467,7 @@ private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onBack),
             )
         }
-        Txt(stringResource(Res.string.sftp_files_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+        MobileScreenTitle(stringResource(Res.string.sftp_files_title))
     }
 }
 
@@ -491,19 +491,10 @@ private fun MobileFilesBreadcrumbRow(label: String, path: String, mono: FontFami
     }
 }
 
-/** Круглая «+»-FAB (cyan, тёмная иконка); в раскрытом состоянии [open] показывает «×» для сворачивания. */
+/** Круглая «+»-FAB Files — общий [MobileFabButton]; в раскрытом состоянии [open] показывает «×» для сворачивания. */
 @Composable
 private fun MobileFabButton(open: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(D.cyan)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Sym(if (open) "close" else "add", size = 26.sp, color = Color(0xFF0A1A26))
-    }
+    MobileFabButton(onClick = onClick, modifier = modifier, icon = if (open) "close" else "add", iconSize = 26.sp)
 }
 
 /** Пункт меню «+»-FAB: пилюля с иконкой и подписью (всплывает над кнопкой). */

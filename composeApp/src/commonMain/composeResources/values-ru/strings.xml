@@ -23,6 +23,22 @@
     <string name="nav_tab_vault">Хранилище</string>
     <string name="nav_tab_more">Ещё</string>
 
+    <!-- Левый icon-rail desktop-оболочки: подписи пунктов. -->
+    <string name="rail_terminal">Терминал</string>
+    <string name="rail_tunnels">Туннели</string>
+    <string name="rail_snippets">Сниппеты</string>
+    <string name="rail_vault">Хранилище</string>
+    <string name="rail_hosts">Хосты</string>
+    <string name="rail_team">Команда</string>
+
+    <!-- Нативные файловые диалоги SFTP (desktop). -->
+    <string name="sftp_dialog_save_as">Сохранить как</string>
+    <string name="sftp_dialog_pick_upload">Выбрать файл для загрузки</string>
+
+    <!-- Оверлей reverse-search истории команд (Ctrl-R) в терминале. -->
+    <string name="terminal_reverse_search_prompt">(reverse-i-search)`%1$s`:  ↑↓ выбрать · Enter вставить · Del убрать · Esc</string>
+    <string name="terminal_reverse_search_no_matches">— нет совпадений —</string>
+
     <!-- Экран сканирования QR (mobile, связывание устройств). -->
     <string name="qr_scan_hint">Наведите камеру на QR-код, показанный на другом устройстве.</string>
     <string name="qr_permission_needed">Для сканирования кода связывания нужен доступ к камере.</string>

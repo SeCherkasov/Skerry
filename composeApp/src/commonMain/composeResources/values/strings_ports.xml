@@ -37,4 +37,10 @@
     <string name="ports_remove_confirm_title">Remove \"%1$s\"?</string>
     <string name="ports_remove_active_message">This tunnel is active — it will be disconnected and deleted. This can\'t be undone.</string>
     <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can\'t be undone.</string>
+    <string name="ports_type_local">LOCAL</string>
+    <string name="ports_type_remote">REMOTE</string>
+    <string name="ports_type_socks">SOCKS</string>
+    <string name="ports_type_local_display">Local forward (-L)</string>
+    <string name="ports_type_remote_display">Remote forward (-R)</string>
+    <string name="ports_type_socks_display">Dynamic SOCKS (-D)</string>
 </resources>

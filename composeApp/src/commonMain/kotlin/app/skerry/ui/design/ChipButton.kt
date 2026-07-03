@@ -1,0 +1,51 @@
+package app.skerry.ui.design
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/**
+ * Компактная кнопка-чип (скругление 6dp, обводка, горизонтальный паддинг 12dp). Две формы:
+ * контурная (по умолчанию — прозрачный фон + [D.cyan14]-граница, как Revoke/Confirm/Save в
+ * настройках) и залитая ([filled] — тонированный фон/граница от [color], как Run/Dismiss в
+ * AI-баре терминала; выключенная — приглушённая).
+ */
+@Composable
+fun ChipButton(
+    label: String,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    filled: Boolean = false,
+    size: TextUnit = 11.5.sp,
+    weight: FontWeight = FontWeight.Normal,
+    verticalPadding: Dp = 6.dp,
+) {
+    val background = if (filled) (if (enabled) color.copy(alpha = 0.16f) else Color(0x0AFFFFFF)) else Color.Transparent
+    val border = if (filled) (if (enabled) color.copy(alpha = 0.5f) else D.line) else D.cyan14
+    Box(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(background)
+            .border(1.dp, border, RoundedCornerShape(6.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = verticalPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        Txt(label, color = if (enabled) color else D.faint, size = size, weight = weight)
+    }
+}

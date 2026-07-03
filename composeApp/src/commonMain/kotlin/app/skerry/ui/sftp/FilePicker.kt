@@ -17,7 +17,7 @@ expect suspend fun pickUploadSource(): UploadSource?
 /**
  * Локальная цель скачивания. SFTP-клиент пишет байты в [stagingPath]; по успешном завершении
  * вызывается [finalize] (на Android — копирование staging→Uri), при ошибке/отмене — [discard]
- * (очистка staging). Оркеструет это [SftpController].
+ * (очистка staging). Оркеструет это [app.skerry.ui.files.TransferCoordinator].
  */
 interface DownloadTarget {
     /** Имя для UI (баннер передачи). */
@@ -36,7 +36,7 @@ interface DownloadTarget {
 /**
  * Локальный источник загрузки. К моменту возврата из [pickUploadSource] байты уже доступны по
  * [stagingPath] (на Android — скопированы из Uri во временный файл). SFTP-клиент читает их оттуда;
- * по завершении (успех или ошибка) [SftpController] вызывает [cleanup].
+ * по завершении (успех или ошибка) [app.skerry.ui.files.TransferCoordinator] вызывает [cleanup].
  */
 interface UploadSource {
     /** Имя файла на удалённой стороне (без пути). */

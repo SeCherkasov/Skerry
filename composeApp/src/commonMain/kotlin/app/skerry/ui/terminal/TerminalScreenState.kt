@@ -428,9 +428,6 @@ class TerminalScreenState(
         suggestionTail = autocomplete.suggestionTail()
     }
 
-    /** Совпадения истории команд для reverse-search (Ctrl-R), от новой к старой; пустой query — пусто. */
-    fun historyMatches(query: String): List<String> = autocomplete.commandHistory.search(query)
-
     // --- Reverse-search истории (Ctrl-R): состояние оверлея живёт здесь, чтобы им одинаково управляли
     // и desktop-клавиши, и мобильная панель/IME, а рендер-оверлей читал единый источник. ---
 

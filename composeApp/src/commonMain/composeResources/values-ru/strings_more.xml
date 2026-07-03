@@ -34,4 +34,7 @@
     <string name="more_ai_sending">Отправка…</string>
     <string name="more_ai_ask">Спросить</string>
     <string name="more_ai_clear">Очистить</string>
+    <string name="more_biometric_prompt_title">Включить разблокировку биометрией</string>
+    <string name="more_biometric_prompt_cancel">Отмена</string>
+    <string name="more_biometric_prompt_subtitle">Подтвердите биометрию, чтобы разблокировать Skerry без ввода мастер-пароля.</string>
 </resources>

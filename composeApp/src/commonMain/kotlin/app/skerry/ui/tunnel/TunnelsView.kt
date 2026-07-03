@@ -41,7 +41,6 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.tunnel.TunnelEntry
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.TunnelStatus
-import app.skerry.ui.tunnel.buildTunnelDraft
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_active_tunnel_one
 import app.skerry.ui.generated.resources.ports_active_tunnels_other
@@ -264,7 +263,7 @@ private fun TunnelRowGlobal(
     onToggle: () -> Unit,
 ) {
     val t = entry.tunnel
-    val (bg, fg) = directionColors(t.direction)
+    val (bg, fg) = t.direction.badgeColors()
     val arrow = if (t.direction == TunnelDirection.Dynamic) "all_inclusive" else "arrow_forward"
     val dest = if (t.direction == TunnelDirection.Dynamic) null else "${t.destHost}:${t.destPort}"
     val dim = entry.status !is TunnelStatus.Active
@@ -275,7 +274,7 @@ private fun TunnelRowGlobal(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Box(Modifier.width(76.dp)) {
-                Badge(directionBadge(t.direction), bg = bg, fg = fg, radius = 4, size = 10.sp)
+                Badge(t.direction.badgeLabel(), bg = bg, fg = fg, radius = 4, size = 10.sp)
             }
             Txt(sourceText(entry), color = if (dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Box(Modifier.width(20.dp)) { Sym(arrow, size = 16.sp, color = D.faint) }
@@ -309,8 +308,8 @@ private fun ActiveCellGlobal(entry: TunnelEntry, onToggle: () -> Unit) {
 
 /**
  * Редактор туннеля (создание/правка): имя, тип, via-host (выпадающий список хостов), bind и dest.
- * Save собирает [buildTunnelDraft] и пишет через [TunnelManager]; для существующего показаны Remove и
- * live-throughput (когда активен). Поля сбрасываются при смене [existing] (через `key`).
+ * Save собирает [TunnelFormState.draft] и пишет через [TunnelManager]; для существующего показаны
+ * Remove и live-throughput (когда активен). Поля сбрасываются при смене [existing] (через `key`).
  */
 @Composable
 private fun TunnelEditor(
@@ -322,49 +321,41 @@ private fun TunnelEditor(
     onRequestRemove: () -> Unit,
 ) {
     val editingId = existing?.id
-    val seed = existing?.tunnel
-    // Ключ = editingId: поля — изолированный буфер правки, заполняется один раз на выбранный туннель.
+    // Ключ = editingId: форма — изолированный буфер правки, заполняется один раз на выбранный туннель.
     // Мутации entry.tunnel в обход (save из другого места для того же id) сюда намеренно НЕ долетают —
     // приоритет у незавершённых правок пользователя.
-    var label by remember(editingId) { mutableStateOf(seed?.label ?: "") }
-    var direction by remember(editingId) { mutableStateOf(seed?.direction ?: TunnelDirection.Local) }
-    var hostId by remember(editingId) { mutableStateOf(seed?.hostId) }
-    var bindHost by remember(editingId) { mutableStateOf(seed?.bindHost ?: "127.0.0.1") }
-    var bindPort by remember(editingId) { mutableStateOf(seed?.bindPort?.toString() ?: "") }
-    var destHost by remember(editingId) { mutableStateOf(seed?.destHost ?: "") }
-    var destPort by remember(editingId) { mutableStateOf(seed?.destPort?.toString() ?: "") }
+    val form = remember(editingId) { TunnelFormState.fromEntry(existing) }
 
-    val isDynamic = direction == TunnelDirection.Dynamic
-    val draft = buildTunnelDraft(editingId, label, hostId, direction, bindHost, bindPort, destHost, destPort)
-    val (badgeBg, badgeFg) = directionColors(direction)
+    val draft = form.draft
+    val (badgeBg, badgeFg) = form.direction.badgeColors()
     val hostList = hosts?.hosts ?: emptyList()
-    val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
+    val hostLabel = form.hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
 
     Column(
         Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
+            Badge(form.direction.badgeLabel(), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
             Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_tunnel_detail), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
         FieldLabel(stringResource(Res.string.ports_field_name))
-        EditField(label, { label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono)
+        EditField(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono)
         Box(Modifier.padding(bottom = 12.dp))
         FieldLabel(stringResource(Res.string.ports_field_type))
-        TypePicker(direction, onPick = { direction = it })
+        TypePicker(form.direction, onPick = { form.direction = it })
         Box(Modifier.padding(bottom = 12.dp))
         FieldLabel(stringResource(Res.string.ports_field_via_host))
-        HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
+        HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { form.hostId = it })
         Box(Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) { FieldLabel(stringResource(Res.string.ports_field_bind_address)); EditField(bindHost, { bindHost = it }, "127.0.0.1", mono) }
-            Column(Modifier.width(70.dp)) { FieldLabel(stringResource(Res.string.ports_field_port)); EditField(bindPort, { bindPort = it }, "0", mono, KeyboardType.Number) }
+            Column(Modifier.weight(1f)) { FieldLabel(stringResource(Res.string.ports_field_bind_address)); EditField(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono) }
+            Column(Modifier.width(70.dp)) { FieldLabel(stringResource(Res.string.ports_field_port)); EditField(form.bindPort, { form.bindPort = it }, "0", mono, KeyboardType.Number) }
         }
-        if (!isDynamic) {
+        if (!form.isDynamic) {
             Box(Modifier.padding(bottom = 12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) { FieldLabel(stringResource(Res.string.ports_field_destination)); EditField(destHost, { destHost = it }, "10.0.0.5", mono) }
-                Column(Modifier.width(70.dp)) { FieldLabel(stringResource(Res.string.ports_field_port)); EditField(destPort, { destPort = it }, "80", mono, KeyboardType.Number) }
+                Column(Modifier.weight(1f)) { FieldLabel(stringResource(Res.string.ports_field_destination)); EditField(form.destHost, { form.destHost = it }, "10.0.0.5", mono) }
+                Column(Modifier.width(70.dp)) { FieldLabel(stringResource(Res.string.ports_field_port)); EditField(form.destPort, { form.destPort = it }, "80", mono, KeyboardType.Number) }
             }
         } else {
             Box(Modifier.padding(bottom = 4.dp))
@@ -410,7 +401,7 @@ private fun TypePicker(current: TunnelDirection, onPick: (TunnelDirection) -> Un
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(directionDisplay(current), color = D.text, size = 12.5.sp)
+                Txt(current.displayLabel(), color = D.text, size = 12.5.sp)
                 Sym("expand_more", size = 16.sp, color = D.faint)
             }
         },
@@ -420,7 +411,7 @@ private fun TypePicker(current: TunnelDirection, onPick: (TunnelDirection) -> Un
             ) {
                 listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
                     Txt(
-                        directionDisplay(option),
+                        option.displayLabel(),
                         color = if (option == current) D.cyanBright else D.text,
                         size = 12.5.sp,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 12.dp, vertical = 9.dp),
@@ -465,24 +456,6 @@ private fun HostPicker(current: String, options: List<Pair<String, String>>, onP
             }
         },
     )
-}
-
-private fun directionColors(direction: TunnelDirection): Pair<Color, Color> = when (direction) {
-    TunnelDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
-    TunnelDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
-    TunnelDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
-}
-
-private fun directionBadge(direction: TunnelDirection): String = when (direction) {
-    TunnelDirection.Local -> "LOCAL"
-    TunnelDirection.Remote -> "REMOTE"
-    TunnelDirection.Dynamic -> "SOCKS"
-}
-
-private fun directionDisplay(direction: TunnelDirection): String = when (direction) {
-    TunnelDirection.Local -> "Local forward (-L)"
-    TunnelDirection.Remote -> "Remote forward (-R)"
-    TunnelDirection.Dynamic -> "Dynamic SOCKS (-D)"
 }
 
 // Мок-путь (офскрин-рендер/превью): статичная таблица + форма деталей.

@@ -3,12 +3,10 @@ package app.skerry.ui.host
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -26,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,8 +44,10 @@ import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.consumeClicks
 
 /**
  * Диалог создания/правки группы хостов: одно поле имени + кнопки. [onDelete] != null — режим правки
@@ -64,15 +63,11 @@ fun GroupDialog(
 ) {
     val editing = onDelete != null
     var name by remember { mutableStateOf(initialName) }
-    val noop = remember { MutableInteractionSource() }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val canSave = name.trim().isNotEmpty()
     val save = { if (canSave) onSave(name) }
-    Box(
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
-        contentAlignment = Alignment.Center,
-    ) {
+    ModalScrim(onDismiss = onDismiss) {
         Column(
             Modifier
                 .widthIn(max = 420.dp)
@@ -81,7 +76,7 @@ fun GroupDialog(
                 .clip(RoundedCornerShape(12.dp))
                 .background(D.surfaceDeep)
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
-                .clickable(interactionSource = noop, indication = null, onClick = {})
+                .consumeClicks()
                 .padding(26.dp),
         ) {
             Txt(
@@ -110,7 +105,7 @@ fun GroupDialog(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0x08FFFFFF))
+                            .background(D.card)
                             .border(1.dp, D.line, RoundedCornerShape(7.dp))
                             .padding(horizontal = 11.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
