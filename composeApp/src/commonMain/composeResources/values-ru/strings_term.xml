@@ -40,7 +40,7 @@
     <string name="term_metric_disk">Диск /</string>
     <string name="term_info_system">СИСТЕМА</string>
     <string name="term_ai_thinking">Думаю…</string>
-    <string name="term_ai_ask_placeholder">Спросите Skerry: \'найди файлы больше 100 МБ\'</string>
+    <string name="term_ai_ask_placeholder">Спросите Skerry: «найди файлы больше 100 МБ»</string>
     <string name="term_ai_run">Выполнить</string>
     <string name="term_ai_run_anyway">Всё равно выполнить</string>
     <string name="term_ai_confirm_run">Подтвердить запуск</string>

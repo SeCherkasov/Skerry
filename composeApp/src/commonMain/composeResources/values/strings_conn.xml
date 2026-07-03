@@ -2,7 +2,7 @@
     <string name="conn_title_new">New connection</string>
     <string name="conn_title_edit">Edit connection</string>
     <string name="conn_subtitle_new">Configure a new skerry in your archipelago. Credentials are encrypted with your master password.</string>
-    <string name="conn_subtitle_edit">Update this skerry\'s profile. Credentials are encrypted with your master password.</string>
+    <string name="conn_subtitle_edit">Update this skerry's profile. Credentials are encrypted with your master password.</string>
     <string name="conn_subtitle_mobile">Credentials are encrypted with your master password and stay on this device.</string>
 
     <string name="conn_field_name">Name</string>

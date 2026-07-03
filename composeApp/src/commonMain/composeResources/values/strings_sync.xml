@@ -53,7 +53,7 @@
 
     <!-- Связывание по коду (join) -->
     <string name="sync_join_title">Link with a code</string>
-    <string name="sync_join_desc">On a device that\'s already signed in, open Settings → Account → Link a device, then scan its QR or paste the code here. The password you choose below encrypts this device\'s vault and can\'t be recovered — if you lose it, you\'ll re-link from scratch.</string>
+    <string name="sync_join_desc">On a device that's already signed in, open Settings → Account → Link a device, then scan its QR or paste the code here. The password you choose below encrypts this device's vault and can't be recovered — if you lose it, you'll re-link from scratch.</string>
     <string name="sync_field_pairing_code">PAIRING CODE</string>
     <string name="sync_placeholder_pairing_code">Paste code (sk1.…)</string>
     <string name="sync_scan_qr">Scan QR code</string>
@@ -61,7 +61,7 @@
     <string name="sync_placeholder_min_chars">at least %1$d characters</string>
     <string name="sync_field_repeat_password">REPEAT PASSWORD</string>
     <string name="sync_placeholder_repeat">repeat to confirm</string>
-    <string name="sync_passwords_mismatch">Passwords don\'t match.</string>
+    <string name="sync_passwords_mismatch">Passwords don't match.</string>
     <string name="sync_link_this_device">Link this device</string>
     <string name="sync_zero_knowledge_account">Zero-knowledge · the account password never travels</string>
 
@@ -77,7 +77,7 @@
     <!-- Связанные устройства -->
     <string name="sync_linked_devices">LINKED DEVICES</string>
     <string name="sync_loading_devices">Loading devices…</string>
-    <string name="sync_load_devices_failed">Couldn\'t load devices. Try Sync now.</string>
+    <string name="sync_load_devices_failed">Couldn't load devices. Try Sync now.</string>
     <string name="sync_only_this_device">Only this device so far.</string>
     <string name="sync_this_device_badge">● this device</string>
     <string name="sync_device_linked_current">linked · this device</string>
@@ -90,7 +90,7 @@
     <string name="sync_setup_dialog_desc">End-to-end encrypted. Skerry never sees your data in plaintext — only your device holds the master password.</string>
     <string name="sync_pairing_dialog_desc">On the new device pick “I have a pairing code”, then scan this QR or paste the code below. It works once.</string>
     <string name="sync_done">Done</string>
-    <string name="sync_pairing_gen_failed">Couldn\'t create a pairing code.</string>
+    <string name="sync_pairing_gen_failed">Couldn't create a pairing code.</string>
     <string name="sync_generating_code">Generating code…</string>
     <string name="sync_code_expired">Code expired — close and start again</string>
     <string name="sync_expires_in">Expires in %1$s</string>
@@ -103,15 +103,15 @@
     <string name="sync_fail_account_not_found">Account not found</string>
     <string name="sync_fail_account_exists">Account already exists</string>
     <string name="sync_fail_pairing_expired">Pairing code expired</string>
-    <string name="sync_fail_network">Can\'t reach the server</string>
+    <string name="sync_fail_network">Can't reach the server</string>
     <string name="sync_fail_protocol">Sync protocol error</string>
-    <string name="sync_fail_connect">Couldn\'t connect</string>
-    <string name="sync_fail_code_malformed">That doesn\'t look like a pairing code</string>
+    <string name="sync_fail_connect">Couldn't connect</string>
+    <string name="sync_fail_code_malformed">That doesn't look like a pairing code</string>
     <string name="sync_fail_code_invalid">Pairing code is not valid</string>
     <string name="sync_fail_wrong_device_password">Wrong password for this device</string>
     <string name="sync_fail_local_vault_corrupted">Local vault is corrupted</string>
-    <string name="sync_fail_pairing">Couldn\'t link the device. Check the code and try again.</string>
-    <string name="sync_fail_save_settings">Couldn\'t save sync settings</string>
+    <string name="sync_fail_pairing">Couldn't link the device. Check the code and try again.</string>
+    <string name="sync_fail_save_settings">Couldn't save sync settings</string>
     <string name="sync_fail_sync">Sync failed</string>
-    <string name="sync_fail_revoke">Couldn\'t revoke the device</string>
+    <string name="sync_fail_revoke">Couldn't revoke the device</string>
 </resources>
