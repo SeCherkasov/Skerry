@@ -53,8 +53,31 @@ data class TeamMemberDto(
 @Serializable
 data class TeamMembersResponse(val members: List<TeamMemberDto>)
 
+/**
+ * Приглашение участника. [role] — целевая роль (`admin`/`editor`/`viewer`); сервер отвергает
+ * `owner` и повышение выше прав приглашающего. Пустая/неизвестная роль трактуется как `viewer`.
+ */
 @Serializable
-data class TeamInviteRequest(val accountId: String, val envelope: String)
+data class TeamInviteRequest(val accountId: String, val envelope: String, val role: String = "viewer")
+
+/** Смена роли участника владельцем/админом (`admin`/`editor`/`viewer`; `owner` недопустим). */
+@Serializable
+data class TeamRoleChangeRequest(val role: String)
+
+/**
+ * Строка аудита команды (`GET /teams/{id}/activity`). Zero-knowledge: только метаданные —
+ * актор, событие и человекочитаемая сводка ([detail], без содержимого записей).
+ */
+@Serializable
+data class TeamActivityDto(
+    val actorAccountId: String,
+    val event: String,
+    val detail: String,
+    val createdAt: Long,
+)
+
+@Serializable
+data class TeamActivityResponse(val entries: List<TeamActivityDto>)
 
 // Командные записи переиспользуют RecordDto/RecordsResponse/PushRequest/PushResponse:
 // формат идентичен, меняется только scope (`/teams/{id}/records` вместо `/vault/records`).

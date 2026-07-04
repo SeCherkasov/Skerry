@@ -86,8 +86,8 @@ class TeamRepository(private val db: Database) {
         Teams.selectAll().where { Teams.id eq teamId }.singleOrNull()?.toTeamRow()
     }
 
-    /** Приглашает аккаунт (status=invited, конверт с teamKey). false — уже участник/приглашён. */
-    suspend fun invite(teamId: String, accountId: String, envelope: ByteArray, invitedBy: String, now: Long): Boolean =
+    /** Приглашает аккаунт с ролью [role] (status=invited, конверт с teamKey). false — уже участник/приглашён. */
+    suspend fun invite(teamId: String, accountId: String, role: String, envelope: ByteArray, invitedBy: String, now: Long): Boolean =
         newSuspendedTransaction(Dispatchers.IO, db) {
             val exists = TeamMembers.selectAll()
                 .where { (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) }
@@ -96,13 +96,24 @@ class TeamRepository(private val db: Database) {
             TeamMembers.insert {
                 it[TeamMembers.teamId] = teamId
                 it[TeamMembers.accountId] = accountId
-                it[role] = TeamRoles.MEMBER
+                it[TeamMembers.role] = role
                 it[status] = TeamMemberStatus.INVITED
                 it[TeamMembers.envelope] = ExposedBlob(envelope)
                 it[TeamMembers.invitedBy] = invitedBy
                 it[createdAt] = now
             }
             true
+        }
+
+    /** Меняет роль участника (owner защищён от смены). false — участника нет или это owner. */
+    suspend fun updateRole(teamId: String, accountId: String, role: String): Boolean =
+        newSuspendedTransaction(Dispatchers.IO, db) {
+            TeamMembers.update({
+                (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) and
+                    (TeamMembers.role neq TeamRoles.OWNER)
+            }) {
+                it[TeamMembers.role] = role
+            } > 0
         }
 
     /**

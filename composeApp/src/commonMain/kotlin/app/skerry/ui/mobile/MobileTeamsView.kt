@@ -42,6 +42,7 @@ import app.skerry.ui.generated.resources.lib_teams_sidebar
 import androidx.compose.ui.text.style.TextOverflow
 import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.team.HOST_SHARE_STRIP
+import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
@@ -78,8 +79,7 @@ import app.skerry.ui.generated.resources.lib_teams_no_key
 import app.skerry.ui.generated.resources.lib_teams_nothing_shared
 import app.skerry.ui.generated.resources.lib_teams_remove_member_message
 import app.skerry.ui.generated.resources.lib_teams_remove_member_title
-import app.skerry.ui.generated.resources.lib_teams_role_member
-import app.skerry.ui.generated.resources.lib_teams_role_owner
+import app.skerry.ui.generated.resources.lib_teams_history
 import app.skerry.ui.generated.resources.lib_teams_share_empty
 import app.skerry.ui.generated.resources.lib_teams_share_host
 import app.skerry.ui.generated.resources.lib_teams_share_host_title
@@ -90,8 +90,14 @@ import app.skerry.ui.generated.resources.lib_teams_shared_snippets
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.generated.resources.lib_teams_sync_now
 import app.skerry.ui.generated.resources.shell_route_team
+import app.skerry.ui.teams.AuditLogDialog
 import app.skerry.ui.teams.CreateTeamDialog
 import app.skerry.ui.teams.InviteMemberDialog
+import app.skerry.ui.teams.RoleBadge
+import app.skerry.ui.teams.RolePickerDialog
+import app.skerry.ui.teams.canModifyMember
+import app.skerry.ui.teams.roleBadgeColors
+import app.skerry.ui.teams.teamRoleLabel
 import app.skerry.ui.teams.InvitePreview
 import app.skerry.ui.teams.ShareItem
 import app.skerry.ui.teams.SharePickerDialog
@@ -145,6 +151,8 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     var invitePreview by remember { mutableStateOf<InvitePreview?>(null) }
     var sharePicker by remember { mutableStateOf<RecordType?>(null) }
     var confirm by remember { mutableStateOf<MobileTeamsConfirm?>(null) }
+    var showHistory by remember { mutableStateOf(false) }
+    var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
 
     val selected = teams.firstOrNull { it.id == selectedId } ?: teams.firstOrNull()
 
@@ -177,6 +185,8 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
                 onDecline = { scope.launch { tc.decline(selected.id); tick++ } },
                 onSync = { scope.launch { tc.refresh(); tc.syncTeam(selected.id); tick++ } },
                 onUnshare = { recordId -> scope.launch { tc.unshareRecord(selected.id, recordId); tick++ } },
+                onShowHistory = { showHistory = true },
+                onChangeRole = { member -> rolePicker = member },
             )
         }
         Spacer(Modifier.height(40.dp))
@@ -194,10 +204,29 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
             preview = invitePreview,
             ownFingerprint = tc.ownFingerprint(),
             busy = busy,
+            assignableRoles = inviteTeam.role.assignableRoles(),
             onLookup = { accountId -> scope.launch { invitePreview = tc.previewInvite(accountId) } },
             onEdited = { invitePreview = null },
-            onSend = { accountId -> showInvite = false; scope.launch { tc.invite(inviteTeam.id, accountId); tick++ } },
+            onSend = { accountId, role -> showInvite = false; scope.launch { tc.invite(inviteTeam.id, accountId, role); tick++ } },
             onDismiss = { showInvite = false },
+        )
+    }
+    val historyTeam = selected
+    if (showHistory && historyTeam != null) {
+        val entries by produceState(emptyList<TeamActivityEntry>(), historyTeam.id, tick) {
+            value = tc.teamActivity(historyTeam.id)
+        }
+        AuditLogDialog(entries, onDismiss = { showHistory = false })
+    }
+    val roleTeam = selected
+    val roleTarget = rolePicker
+    if (roleTarget != null && roleTeam != null) {
+        RolePickerDialog(
+            accountId = roleTarget.accountId,
+            current = roleTarget.role,
+            assignable = roleTeam.role.assignableRoles(),
+            onPick = { newRole -> rolePicker = null; scope.launch { tc.changeRole(roleTeam.id, roleTarget.accountId, newRole); tick++ } },
+            onDismiss = { rolePicker = null },
         )
     }
     val shareTeam = selected
@@ -283,10 +312,15 @@ private fun MobileTeamDetail(
     onDecline: () -> Unit,
     onSync: () -> Unit,
     onUnshare: (String) -> Unit,
+    onShowHistory: () -> Unit,
+    onChangeRole: (TeamMember) -> Unit,
 ) {
     val mono = LocalFonts.current.mono
     val invited = team.status == TeamMemberStatus.INVITED
     val owner = team.role == TeamRole.OWNER && !invited
+    val canManage = team.role.canManageMembers && !invited
+    val canWrite = team.role.canWrite && !invited && team.hasKey
+    val canAudit = team.role.canViewAudit && !invited
     val members by produceState(emptyList<TeamMember>(), team.id, team.memberCount, tick) {
         value = tc.members(team.id)
     }
@@ -324,33 +358,39 @@ private fun MobileTeamDetail(
 
     Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         GhostButton(stringResource(Res.string.lib_teams_sync_now), onClick = onSync, icon = "sync")
-        if (owner) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
+        if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
+        if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
     }
 
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_members))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         members.forEach { m ->
-            MobileMemberRow(m, isOwnerRow = m.accountId == team.ownerAccountId, canRemove = owner && m.accountId != team.ownerAccountId) {
-                onConfirm(MobileTeamsConfirm.Remove(team.id, m.accountId))
-            }
+            val modifiable = canManage && m.accountId != team.ownerAccountId && canModifyMember(team.role, m.role)
+            MobileMemberRow(
+                m,
+                isOwnerRow = m.accountId == team.ownerAccountId,
+                canManageMember = modifiable,
+                onChangeRole = { onChangeRole(m) },
+                onRemove = { onConfirm(MobileTeamsConfirm.Remove(team.id, m.accountId)) },
+            )
         }
     }
 
     MobileTeamsSectionLabel("${stringResource(Res.string.lib_teams_shared_hosts)} · ${sharedHosts.size}")
     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
     sharedHosts.forEach { host ->
-        MobileSharedRow(host.label, "${host.username}@${host.address}", canUnshare = team.hasKey) { onUnshare(host.id) }
+        MobileSharedRow(host.label, "${host.username}@${host.address}", canUnshare = canWrite) { onUnshare(host.id) }
     }
-    if (team.hasKey) {
+    if (canWrite) {
         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
     }
 
     MobileTeamsSectionLabel("${stringResource(Res.string.lib_teams_shared_snippets)} · ${sharedSnippets.size}")
     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
     sharedSnippets.forEach { snippet ->
-        MobileSharedRow(snippet.label, snippet.command, canUnshare = team.hasKey) { onUnshare(snippet.id) }
+        MobileSharedRow(snippet.label, snippet.command, canUnshare = canWrite) { onUnshare(snippet.id) }
     }
-    if (team.hasKey) {
+    if (canWrite) {
         GhostButton(stringResource(Res.string.lib_teams_share_snippet), onClick = { onShare(RecordType.SNIPPET) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
     }
 
@@ -392,13 +432,16 @@ private fun MobileTeamChip(team: TeamUi, active: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MobileMemberRow(m: TeamMember, isOwnerRow: Boolean, canRemove: Boolean, onRemove: () -> Unit) {
+private fun MobileMemberRow(
+    m: TeamMember,
+    isOwnerRow: Boolean,
+    canManageMember: Boolean,
+    onChangeRole: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val mono = LocalFonts.current.mono
-    val (roleText, roleFg, roleBg) = when {
-        isOwnerRow -> Triple(stringResource(Res.string.lib_teams_role_owner), D.amber, D.amber.copy(alpha = 0.14f))
-        m.status == TeamMemberStatus.INVITED -> Triple(stringResource(Res.string.lib_teams_status_invited), D.cyanBright, D.cyan.copy(alpha = 0.12f))
-        else -> Triple(stringResource(Res.string.lib_teams_role_member), D.dim, Color(0x0DFFFFFF))
-    }
+    val invited = m.status == TeamMemberStatus.INVITED
+    val (roleFg, roleBg) = roleBadgeColors(m.role)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -408,10 +451,12 @@ private fun MobileMemberRow(m: TeamMember, isOwnerRow: Boolean, canRemove: Boole
             Txt(m.accountId.take(2).uppercase(), color = Color(0xFF0A1A26), size = 11.5.sp, weight = FontWeight.SemiBold)
         }
         Txt(m.accountId, color = D.text, size = 12.5.sp, font = mono, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-        Box(Modifier.clip(RoundedCornerShape(20.dp)).background(roleBg).padding(horizontal = 8.dp, vertical = 2.dp)) {
-            Txt(roleText, color = roleFg, size = 9.5.sp, weight = FontWeight.SemiBold)
+        if (invited) {
+            RoleBadge(stringResource(Res.string.lib_teams_status_invited), D.cyanBright, D.cyan.copy(alpha = 0.12f))
         }
-        if (canRemove) {
+        val badgeModifier = if (canManageMember) Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onChangeRole) else Modifier
+        RoleBadge(teamRoleLabel(m.role), roleFg, roleBg, modifier = badgeModifier)
+        if (canManageMember) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(4.dp)) {
                 Sym("close", size = 15.sp, color = D.faint)
             }

@@ -41,7 +41,9 @@ import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.shared.team.TeamRole
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_invite_role
 import app.skerry.ui.generated.resources.lib_teams_create_subtitle
 import app.skerry.ui.generated.resources.lib_teams_create_title
 import app.skerry.ui.generated.resources.lib_teams_invite_account_placeholder
@@ -62,7 +64,7 @@ data class ShareItem(val id: String, val label: String, val detail: String)
 
 /** Карточка диалога Teams — тот же визуальный язык, что [app.skerry.ui.design.ConfirmActionDialog]. */
 @Composable
-private fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     ModalScrim(onDismiss = onDismiss) {
         Column(
             Modifier
@@ -120,7 +122,7 @@ private fun TeamsTextField(
 }
 
 @Composable
-private fun CancelButton(onDismiss: () -> Unit) {
+internal fun CancelButton(onDismiss: () -> Unit) {
     Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
         Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
     }
@@ -160,12 +162,15 @@ fun InviteMemberDialog(
     preview: InvitePreview?,
     ownFingerprint: String?,
     busy: Boolean,
+    assignableRoles: List<TeamRole>,
     onLookup: (String) -> Unit,
     onEdited: () -> Unit,
-    onSend: (String) -> Unit,
+    onSend: (String, TeamRole) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var accountId by remember { mutableStateOf("") }
+    // Least-privilege по умолчанию: младшая из назначаемых ролей (обычно VIEWER).
+    var role by remember { mutableStateOf(assignableRoles.lastOrNull() ?: TeamRole.VIEWER) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val mono = LocalFonts.current.mono
@@ -173,7 +178,7 @@ fun InviteMemberDialog(
     fun submit() {
         val id = accountId.trim()
         if (id.isEmpty() || busy) return
-        if (ready) onSend(id) else onLookup(id)
+        if (ready) onSend(id, role) else onLookup(id)
     }
     TeamsDialogCard(onDismiss) {
         Txt(stringResource(Res.string.lib_teams_invite_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
@@ -196,6 +201,10 @@ fun InviteMemberDialog(
                     Txt(stringResource(Res.string.lib_teams_your_fingerprint, ownFingerprint), color = D.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 8.dp))
                 }
             }
+        }
+        if (assignableRoles.isNotEmpty()) {
+            Txt(stringResource(Res.string.lib_teams_invite_role).uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+            RoleChips(assignableRoles, role) { role = it }
         }
         Row(
             Modifier.fillMaxWidth().padding(top = 18.dp),

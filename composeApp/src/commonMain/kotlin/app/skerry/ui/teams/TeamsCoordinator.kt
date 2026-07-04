@@ -6,6 +6,7 @@ import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSignal
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.SyncException
+import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamInviteCodec
 import app.skerry.shared.team.TeamKeyStore
@@ -229,8 +230,8 @@ class TeamsCoordinator(
         }
     }
 
-    /** Шаг 2: запечатать teamKey+имя на ключ приглашаемого и создать членство-приглашение. */
-    suspend fun invite(teamId: String, accountId: String) {
+    /** Шаг 2: запечатать teamKey+имя на ключ приглашаемого и создать членство-приглашение с ролью [role]. */
+    suspend fun invite(teamId: String, accountId: String, role: TeamRole) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         val entry = keyStore.get(teamId) ?: return markError(TeamsFailure.KeyMissing)
@@ -238,8 +239,32 @@ class TeamsCoordinator(
         op {
             val recipientKey = c.fetchPublicKey(s, accountId)
                 ?: return@op markError(TeamsFailure.NoRecipientKey)
-            c.invite(s, teamId, accountId, inviteCodec.seal(recipientKey, teamKey, entry.name))
+            c.invite(s, teamId, accountId, role, inviteCodec.seal(recipientKey, teamKey, entry.name))
             refreshUnlocked(s, c)
+        }
+    }
+
+    /** Сменить роль участника (owner/admin; сервер применяет анти-эскалацию). */
+    suspend fun changeRole(teamId: String, accountId: String, role: TeamRole) {
+        val s = session() ?: return markError(TeamsFailure.NotConnected)
+        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        op {
+            c.changeRole(s, teamId, accountId, role)
+            refreshUnlocked(s, c)
+        }
+    }
+
+    /** Аудит-лог команды (доступен owner/admin); при ошибке — [lastError] и пустой список. */
+    suspend fun teamActivity(teamId: String): List<TeamActivityEntry> {
+        val s = session() ?: return emptyList()
+        val c = client() ?: return emptyList()
+        return try {
+            c.teamActivity(s, teamId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            markError(e.toFailure())
+            emptyList()
         }
     }
 
@@ -255,7 +280,8 @@ class TeamsCoordinator(
             val identity = identityStore.load() ?: return@op markError(TeamsFailure.KeyMissing)
             val invite = inviteCodec.open(identity, envelope)
                 ?: return@op markError(TeamsFailure.KeyMissing)
-            keyStore.put(teamId, invite.teamName, TeamRole.MEMBER, invite.teamKey)
+            // Роль-плейсхолдер: фактическую роль вернёт сервер при refreshUnlocked (listTeams).
+            keyStore.put(teamId, invite.teamName, TeamRole.VIEWER, invite.teamKey)
             c.accept(s, teamId)
             refreshUnlocked(s, c)
         }

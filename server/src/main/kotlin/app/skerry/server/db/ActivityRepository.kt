@@ -2,6 +2,7 @@ package app.skerry.server.db
 
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.deleteWhere
@@ -21,6 +22,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
         event: String,
         detail: String,
         deviceId: String? = null,
+        teamId: String? = null,
         now: Long = System.currentTimeMillis(),
     ): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
         ActivityLog.insert {
@@ -28,6 +30,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
             it[ActivityLog.deviceId] = deviceId
             it[ActivityLog.event] = event
             it[ActivityLog.detail] = detail
+            it[ActivityLog.teamId] = teamId
             it[createdAt] = now
         }
         prune()
@@ -40,6 +43,16 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
             .limit(limit)
             .map { it.toRow() }
     }
+
+    /** Свежие события одной команды (для team-scoped истории участникам owner/admin). */
+    suspend fun recentForTeam(teamId: String, limit: Int = 100): List<ActivityRow> =
+        newSuspendedTransaction(Dispatchers.IO, db) {
+            ActivityLog.selectAll()
+                .where { ActivityLog.teamId eq teamId }
+                .orderBy(ActivityLog.seq to SortOrder.DESC)
+                .limit(limit)
+                .map { it.toRow() }
+        }
 
     /** Всего удержанных событий (≤ maxRows) — для честного «N из M» в консоли. */
     suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {

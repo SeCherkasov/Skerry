@@ -1,0 +1,217 @@
+package app.skerry.ui.teams
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamRole
+import app.skerry.ui.design.D
+import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_event_accept
+import app.skerry.ui.generated.resources.lib_teams_event_create
+import app.skerry.ui.generated.resources.lib_teams_event_delete
+import app.skerry.ui.generated.resources.lib_teams_event_invite
+import app.skerry.ui.generated.resources.lib_teams_event_remove
+import app.skerry.ui.generated.resources.lib_teams_event_role_change
+import app.skerry.ui.generated.resources.lib_teams_event_share
+import app.skerry.ui.generated.resources.lib_teams_history_empty
+import app.skerry.ui.generated.resources.lib_teams_history_title
+import app.skerry.ui.generated.resources.lib_teams_role_admin
+import app.skerry.ui.generated.resources.lib_teams_role_editor
+import app.skerry.ui.generated.resources.lib_teams_role_owner
+import app.skerry.ui.generated.resources.lib_teams_role_picker_title
+import app.skerry.ui.generated.resources.lib_teams_role_viewer
+import org.jetbrains.compose.resources.stringResource
+
+/** Локализованная метка роли для бейджей и пикеров. */
+@Composable
+internal fun teamRoleLabel(role: TeamRole): String = when (role) {
+    TeamRole.OWNER -> stringResource(Res.string.lib_teams_role_owner)
+    TeamRole.ADMIN -> stringResource(Res.string.lib_teams_role_admin)
+    TeamRole.EDITOR -> stringResource(Res.string.lib_teams_role_editor)
+    TeamRole.VIEWER -> stringResource(Res.string.lib_teams_role_viewer)
+}
+
+/**
+ * Вправе ли [actor] менять/удалять участника с ролью [target] (зеркалит серверный ACL для UX;
+ * итоговое решение всё равно за сервером). Owner — любого кроме владельца; admin — editor/viewer.
+ */
+internal fun canModifyMember(actor: TeamRole, target: TeamRole): Boolean = when (actor) {
+    TeamRole.OWNER -> target != TeamRole.OWNER
+    TeamRole.ADMIN -> target == TeamRole.EDITOR || target == TeamRole.VIEWER
+    else -> false
+}
+
+/** Цвета бейджа роли (текст, фон) — только токены [D]. */
+internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
+    TeamRole.OWNER -> D.amber to D.amber.copy(alpha = 0.14f)
+    TeamRole.ADMIN -> D.cyanBright to D.cyan.copy(alpha = 0.12f)
+    TeamRole.EDITOR -> D.moss to D.moss.copy(alpha = 0.14f)
+    TeamRole.VIEWER -> D.dim to Color(0x0DFFFFFF)
+}
+
+/** Локализованная сводка события аудита; неизвестное событие показываем как есть. */
+@Composable
+internal fun teamEventLabel(event: String): String = when (event) {
+    "team.create" -> stringResource(Res.string.lib_teams_event_create)
+    "team.invite" -> stringResource(Res.string.lib_teams_event_invite)
+    "team.remove" -> stringResource(Res.string.lib_teams_event_remove)
+    "team.accept" -> stringResource(Res.string.lib_teams_event_accept)
+    "team.role_change" -> stringResource(Res.string.lib_teams_event_role_change)
+    "team.push" -> stringResource(Res.string.lib_teams_event_share)
+    "team.delete" -> stringResource(Res.string.lib_teams_event_delete)
+    else -> event
+}
+
+/** Бейдж роли/статуса участника (фиксированный визуальный язык desktop и mobile). */
+@Composable
+internal fun RoleBadge(text: String, fg: Color, bg: Color, modifier: Modifier = Modifier) {
+    Box(modifier.clip(RoundedCornerShape(20.dp)).background(bg).padding(horizontal = 9.dp, vertical = 2.dp)) {
+        Txt(text, color = fg, size = 10.sp, weight = FontWeight.SemiBold)
+    }
+}
+
+/** Горизонтальный сегмент-выбор роли (для диалога приглашения). [options] — что вправе назначить актор. */
+@Composable
+internal fun RoleChips(options: List<TeamRole>, selected: TeamRole, onSelect: (TeamRole) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { role ->
+            val active = role == selected
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(if (active) D.cyan.copy(alpha = 0.12f) else Color.Transparent)
+                    .border(1.dp, if (active) D.cyan else D.line, RoundedCornerShape(7.dp))
+                    .clickable { onSelect(role) }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            ) {
+                Txt(teamRoleLabel(role), color = if (active) D.cyanBright else D.dim, size = 11.5.sp, weight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/** Диалог смены роли участника: список назначаемых ролей, текущая подсвечена. */
+@Composable
+internal fun RolePickerDialog(
+    accountId: String,
+    current: TeamRole,
+    assignable: List<TeamRole>,
+    onPick: (TeamRole) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val mono = LocalFonts.current.mono
+    TeamsDialogCard(onDismiss) {
+        Txt(stringResource(Res.string.lib_teams_role_picker_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+        Txt(accountId, color = D.dim, size = 12.sp, font = mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            assignable.forEach { role ->
+                val active = role == current
+                val (fg, bg) = roleBadgeColors(role)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(7.dp))
+                        .border(1.dp, if (active) D.cyan else D.cyan08, RoundedCornerShape(7.dp))
+                        .clickable { onPick(role) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    RoleBadge(teamRoleLabel(role), fg, bg)
+                    if (active) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                            Txt("✓", color = D.cyanBright, size = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+            CancelButton(onDismiss)
+        }
+    }
+}
+
+/** Диалог аудит-лога команды (owner/admin): свежие события первыми, только метаданные. */
+@Composable
+internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> Unit) {
+    val mono = LocalFonts.current.mono
+    TeamsDialogCard(onDismiss) {
+        Txt(stringResource(Res.string.lib_teams_history_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
+        if (entries.isEmpty()) {
+            Txt(stringResource(Res.string.lib_teams_history_empty), color = D.dim, size = 12.5.sp)
+        } else {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                entries.forEach { e ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, D.cyan08, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                    ) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Txt(teamEventLabel(e.event), color = D.textBright, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Txt(formatEpochUtc(e.createdAt), color = D.faint, size = 10.5.sp, font = mono)
+                        }
+                        Txt(e.actorAccountId, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
+                        if (e.detail.isNotBlank()) {
+                            Txt(e.detail, color = D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
+                        }
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+            CancelButton(onDismiss)
+        }
+    }
+}
+
+/**
+ * Форматирует epoch-millis в `YYYY-MM-DD HH:MM` UTC чистой арифметикой (без kotlinx-datetime,
+ * которого нет в UI-модуле). Алгоритм civil-from-days Говарда Хиннанта; серверные метки ≥ 0.
+ */
+internal fun formatEpochUtc(millis: Long): String {
+    val totalSec = millis / 1000
+    val days = totalSec / 86_400
+    val secOfDay = totalSec % 86_400
+    val hh = secOfDay / 3600
+    val mm = (secOfDay % 3600) / 60
+    val z = days + 719_468
+    val era = (if (z >= 0) z else z - 146_096) / 146_097
+    val doe = z - era * 146_097
+    val yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365
+    val year0 = yoe + era * 400
+    val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    val mp = (5 * doy + 2) / 153
+    val day = doy - (153 * mp + 2) / 5 + 1
+    val month = if (mp < 10) mp + 3 else mp - 9
+    val year = if (month <= 2) year0 + 1 else year0
+    fun p2(v: Long) = if (v < 10) "0$v" else "$v"
+    return "$year-${p2(month)}-${p2(day)} ${p2(hh)}:${p2(mm)}"
+}

@@ -21,6 +21,7 @@ import com.nimbusds.srp6.SRP6ClientSession
 import com.nimbusds.srp6.SRP6CryptoParams
 import com.nimbusds.srp6.SRP6Exception
 import com.nimbusds.srp6.SRP6VerifierGenerator
+import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
@@ -28,9 +29,11 @@ import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamSummary
 import app.skerry.sync.wire.AccountKeyResponse
 import app.skerry.sync.wire.PublishKeyRequest
+import app.skerry.sync.wire.TeamActivityResponse
 import app.skerry.sync.wire.TeamCreateRequest
 import app.skerry.sync.wire.TeamInviteRequest
 import app.skerry.sync.wire.TeamMembersResponse
+import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -257,16 +260,31 @@ class KtorSyncClient(
         }
     }
 
-    override suspend fun invite(session: SyncSession, teamId: String, accountId: String, envelope: ByteArray) {
+    override suspend fun invite(session: SyncSession, teamId: String, accountId: String, role: TeamRole, envelope: ByteArray) {
         post("/teams/${teamId.encodeURLPathPart()}/members") {
             bearerAuth(session.accessToken)
             contentType(ContentType.Application.Json)
-            setBody(TeamInviteRequest(accountId, envelope.b64()))
+            setBody(TeamInviteRequest(accountId, envelope.b64(), role.wire))
         }.expectSuccess()
     }
 
     override suspend fun accept(session: SyncSession, teamId: String) {
         post("/teams/${teamId.encodeURLPathPart()}/accept") { bearerAuth(session.accessToken) }.expectSuccess()
+    }
+
+    override suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole) {
+        put("/teams/${teamId.encodeURLPathPart()}/members/${accountId.encodeURLPathPart()}/role") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamRoleChangeRequest(role.wire))
+        }.expectSuccess()
+    }
+
+    override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> {
+        val resp: TeamActivityResponse = get("/teams/${teamId.encodeURLPathPart()}/activity") {
+            bearerAuth(session.accessToken)
+        }.bodyChecked()
+        return resp.entries.map { TeamActivityEntry(it.actorAccountId, it.event, it.detail, it.createdAt) }
     }
 
     override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) {

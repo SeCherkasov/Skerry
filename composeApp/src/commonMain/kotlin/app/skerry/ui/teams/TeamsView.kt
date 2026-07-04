@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.team.HOST_SHARE_STRIP
+import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
@@ -70,6 +71,7 @@ import app.skerry.ui.generated.resources.lib_teams_err_no_such_account
 import app.skerry.ui.generated.resources.lib_teams_err_not_connected
 import app.skerry.ui.generated.resources.lib_teams_err_protocol
 import app.skerry.ui.generated.resources.lib_teams_err_vault_locked
+import app.skerry.ui.generated.resources.lib_teams_history
 import app.skerry.ui.generated.resources.lib_teams_invite
 import app.skerry.ui.generated.resources.lib_teams_invited_banner
 import app.skerry.ui.generated.resources.lib_teams_leave
@@ -81,8 +83,6 @@ import app.skerry.ui.generated.resources.lib_teams_no_key
 import app.skerry.ui.generated.resources.lib_teams_nothing_shared
 import app.skerry.ui.generated.resources.lib_teams_remove_member_message
 import app.skerry.ui.generated.resources.lib_teams_remove_member_title
-import app.skerry.ui.generated.resources.lib_teams_role_member
-import app.skerry.ui.generated.resources.lib_teams_role_owner
 import app.skerry.ui.generated.resources.lib_teams_share_empty
 import app.skerry.ui.generated.resources.lib_teams_share_host
 import app.skerry.ui.generated.resources.lib_teams_share_host_title
@@ -127,6 +127,8 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     var invitePreview by remember { mutableStateOf<InvitePreview?>(null) }
     var sharePicker by remember { mutableStateOf<RecordType?>(null) }
     var confirm by remember { mutableStateOf<TeamsConfirm?>(null) }
+    var showHistory by remember { mutableStateOf(false) }
+    var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
 
     val selected = teams.firstOrNull { it.id == selectedId } ?: teams.firstOrNull()
     fun afterOp() {
@@ -160,6 +162,8 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                     onDecline = { scope.launch2 { tc.decline(selected.id); afterOp() } },
                     onSync = { scope.launch2 { tc.refresh(); tc.syncTeam(selected.id); afterOp() } },
                     onUnshare = { recordId -> scope.launch2 { tc.unshareRecord(selected.id, recordId); afterOp() } },
+                    onShowHistory = { showHistory = true },
+                    onChangeRole = { member -> rolePicker = member },
                 )
             }
         }
@@ -177,9 +181,10 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
             preview = invitePreview,
             ownFingerprint = tc.ownFingerprint(),
             busy = busy,
+            assignableRoles = inviteTeam.role.assignableRoles(),
             onLookup = { accountId -> scope.launch2 { invitePreview = tc.previewInvite(accountId) } },
             onEdited = { invitePreview = null },
-            onSend = { accountId -> showInvite = false; scope.launch2 { tc.invite(inviteTeam.id, accountId); afterOp() } },
+            onSend = { accountId, role -> showInvite = false; scope.launch2 { tc.invite(inviteTeam.id, accountId, role); afterOp() } },
             onDismiss = { showInvite = false },
         )
     }
@@ -210,6 +215,24 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                 }
             },
             onDismiss = { confirm = null },
+        )
+    }
+    val historyTeam = selected
+    if (showHistory && historyTeam != null) {
+        val entries by produceState(emptyList<TeamActivityEntry>(), historyTeam.id, tick) {
+            value = tc.teamActivity(historyTeam.id)
+        }
+        AuditLogDialog(entries, onDismiss = { showHistory = false })
+    }
+    val roleTeam = selected
+    val roleTarget = rolePicker
+    if (roleTarget != null && roleTeam != null) {
+        RolePickerDialog(
+            accountId = roleTarget.accountId,
+            current = roleTarget.role,
+            assignable = roleTeam.role.assignableRoles(),
+            onPick = { newRole -> rolePicker = null; scope.launch2 { tc.changeRole(roleTeam.id, roleTarget.accountId, newRole); afterOp() } },
+            onDismiss = { rolePicker = null },
         )
     }
 }
@@ -267,10 +290,15 @@ private fun TeamDetail(
     onDecline: () -> Unit,
     onSync: () -> Unit,
     onUnshare: (String) -> Unit,
+    onShowHistory: () -> Unit,
+    onChangeRole: (TeamMember) -> Unit,
 ) {
     val mono = LocalFonts.current.mono
     val invited = team.status == TeamMemberStatus.INVITED
     val owner = team.role == TeamRole.OWNER && !invited
+    val canManage = team.role.canManageMembers && !invited
+    val canWrite = team.role.canWrite && !invited && team.hasKey
+    val canAudit = team.role.canViewAudit && !invited
     val members by produceState(emptyList<TeamMember>(), team.id, team.memberCount, tick) {
         value = tc.members(team.id)
     }
@@ -289,7 +317,8 @@ private fun TeamDetail(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!invited) GhostButton(stringResource(Res.string.lib_teams_sync_now), onClick = onSync, icon = "sync")
-            if (owner) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
+            if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
+            if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
             if (owner) {
                 GhostButton(stringResource(Res.string.lib_teams_delete), onClick = { onConfirm(TeamsConfirm.Delete(team.id)) }, icon = "delete", fg = D.sunset)
             } else if (!invited) {
@@ -322,9 +351,14 @@ private fun TeamDetail(
         LiveSectionLabel(stringResource(Res.string.lib_teams_members))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             members.forEach { m ->
-                LiveMemberRow(m, isOwnerRow = m.accountId == team.ownerAccountId, canRemove = owner && m.accountId != team.ownerAccountId) {
-                    onConfirm(TeamsConfirm.Remove(team.id, m.accountId))
-                }
+                val modifiable = canManage && m.accountId != team.ownerAccountId && canModifyMember(team.role, m.role)
+                LiveMemberRow(
+                    m,
+                    isOwnerRow = m.accountId == team.ownerAccountId,
+                    canManageMember = modifiable,
+                    onChangeRole = { onChangeRole(m) },
+                    onRemove = { onConfirm(TeamsConfirm.Remove(team.id, m.accountId)) },
+                )
             }
         }
         if (!invited) {
@@ -333,9 +367,9 @@ private fun TeamDetail(
                     LiveSectionLabel("${stringResource(Res.string.lib_teams_shared_hosts)} · ${sharedHosts.size}")
                     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
                     sharedHosts.forEach { host ->
-                        SharedRecordRow(host.label, "${host.username}@${host.address}", mono, canUnshare = team.hasKey) { onUnshare(host.id) }
+                        SharedRecordRow(host.label, "${host.username}@${host.address}", mono, canUnshare = canWrite) { onUnshare(host.id) }
                     }
-                    if (team.hasKey) {
+                    if (canWrite) {
                         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
                     }
                 }
@@ -343,9 +377,9 @@ private fun TeamDetail(
                     LiveSectionLabel("${stringResource(Res.string.lib_teams_shared_snippets)} · ${sharedSnippets.size}")
                     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
                     sharedSnippets.forEach { snippet ->
-                        SharedRecordRow(snippet.label, snippet.command, mono, canUnshare = team.hasKey) { onUnshare(snippet.id) }
+                        SharedRecordRow(snippet.label, snippet.command, mono, canUnshare = canWrite) { onUnshare(snippet.id) }
                     }
-                    if (team.hasKey) {
+                    if (canWrite) {
                         GhostButton(stringResource(Res.string.lib_teams_share_snippet), onClick = { onShare(RecordType.SNIPPET) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
                     }
                 }
@@ -387,14 +421,17 @@ private fun LiveSectionLabel(text: String) {
 }
 
 @Composable
-private fun LiveMemberRow(m: TeamMember, isOwnerRow: Boolean, canRemove: Boolean, onRemove: () -> Unit) {
+private fun LiveMemberRow(
+    m: TeamMember,
+    isOwnerRow: Boolean,
+    canManageMember: Boolean,
+    onChangeRole: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val mono = LocalFonts.current.mono
     val initials = m.accountId.take(2).uppercase()
-    val (roleText, roleFg, roleBg) = when {
-        isOwnerRow -> Triple(stringResource(Res.string.lib_teams_role_owner), D.amber, D.amber.copy(alpha = 0.14f))
-        m.status == TeamMemberStatus.INVITED -> Triple(stringResource(Res.string.lib_teams_status_invited), D.cyanBright, D.cyan.copy(alpha = 0.12f))
-        else -> Triple(stringResource(Res.string.lib_teams_role_member), D.dim, Color(0x0DFFFFFF))
-    }
+    val invited = m.status == TeamMemberStatus.INVITED
+    val (roleFg, roleBg) = roleBadgeColors(m.role)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -404,10 +441,13 @@ private fun LiveMemberRow(m: TeamMember, isOwnerRow: Boolean, canRemove: Boolean
             Txt(initials, color = Color(0xFF0A1A26), size = 13.sp, weight = FontWeight.SemiBold)
         }
         Txt(m.accountId, color = D.text, size = 13.sp, font = mono, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-        Box(Modifier.clip(RoundedCornerShape(20.dp)).background(roleBg).padding(horizontal = 9.dp, vertical = 2.dp)) {
-            Txt(roleText, color = roleFg, size = 10.sp, weight = FontWeight.SemiBold)
+        if (invited) {
+            RoleBadge(stringResource(Res.string.lib_teams_status_invited), D.cyanBright, D.cyan.copy(alpha = 0.12f))
         }
-        if (canRemove) {
+        // Клик по бейджу роли меняет её (owner/admin в пределах анти-эскалации).
+        val badgeModifier = if (canManageMember) Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onChangeRole) else Modifier
+        RoleBadge(teamRoleLabel(m.role), roleFg, roleBg, modifier = badgeModifier)
+        if (canManageMember) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(4.dp)) {
                 Sym("close", size = 15.sp, color = D.faint)
             }

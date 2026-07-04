@@ -80,9 +80,15 @@ object ActivityLog : Table("activity_log") {
     val deviceId = varchar("device_id", 64).nullable()
     val event = varchar("event", 32)
     val detail = text("detail")
+    /** Команда, к которой относится событие (для team-scoped истории); null — аккаунтные события. */
+    val teamId = varchar("team_id", 64).nullable()
     val createdAt = long("created_at")
 
     override val primaryKey = PrimaryKey(seq)
+
+    init {
+        index("idx_activity_team", false, teamId, seq)
+    }
 }
 
 /**

@@ -2,6 +2,7 @@ package app.skerry.server.routes
 
 import app.skerry.server.Services
 import app.skerry.server.accountId
+import app.skerry.server.db.TeamMemberRow
 import app.skerry.server.db.TeamMemberStatus
 import app.skerry.server.db.TeamRoles
 import app.skerry.server.jwtPrincipal
@@ -19,7 +20,10 @@ import app.skerry.sync.wire.TeamCreateRequest
 import app.skerry.sync.wire.TeamDto
 import app.skerry.sync.wire.TeamInviteRequest
 import app.skerry.sync.wire.TeamMemberDto
+import app.skerry.sync.wire.TeamActivityDto
+import app.skerry.sync.wire.TeamActivityResponse
 import app.skerry.sync.wire.TeamMembersResponse
+import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -42,7 +46,8 @@ private const val MAX_ENVELOPE_BYTES = 4096
 /**
  * Teams: ключи аккаунтов, состав команд и team-scoped записи. Zero-knowledge: сервер хранит
  * только метаданные (состав, роли) и шифроблобы (конверты приглашений, записи под teamKey).
- * ACL: `owner` управляет составом и жизнью команды; записи читают и пишут все активные участники.
+ * ACL (гранулярные роли owner>admin>editor>viewer, см. [TeamRoles]): owner удаляет команду;
+ * owner/admin управляют составом и ролями; owner/admin/editor пишут записи; читают все активные.
  */
 fun Route.teamRoutes(services: Services) {
     put("/account/key") {
@@ -74,7 +79,7 @@ fun Route.teamRoutes(services: Services) {
             call.respond(HttpStatusCode.Conflict, ErrorResponse("team already exists"))
             return@post
         }
-        services.activity.record(principal.accountId, "team.create", req.teamId)
+        services.activity.record(principal.accountId, "team.create", req.teamId, teamId = req.teamId)
         call.respond(HttpStatusCode.Created)
     }
 
@@ -98,9 +103,11 @@ fun Route.teamRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@delete
         val members = services.teams.members(teamId)
-        if (call.rejectUnlessOwner(services, teamId, principal.accountId)) return@delete
+        call.requireActiveMember(
+            services, teamId, principal.accountId, { it == TeamRoles.OWNER }, "owner role required",
+        ) ?: return@delete
         services.teams.deleteTeam(teamId)
-        services.activity.record(principal.accountId, "team.delete", teamId)
+        services.activity.record(principal.accountId, "team.delete", teamId, teamId = teamId)
         // Всем бывшим участникам: состав изменился — пусть перечитают список команд.
         members.forEach { services.notifier.publishMembership(it.accountId) }
         call.respond(HttpStatusCode.OK)
@@ -109,7 +116,7 @@ fun Route.teamRoutes(services: Services) {
     get("/teams/{id}/members") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@get
-        if (call.rejectUnlessActiveMember(services, teamId, principal.accountId)) return@get
+        call.requireActiveMember(services, teamId, principal.accountId) ?: return@get
         val members = services.teams.members(teamId).map {
             TeamMemberDto(it.accountId, it.role, it.status, it.createdAt)
         }
@@ -123,35 +130,75 @@ fun Route.teamRoutes(services: Services) {
         if (req.accountId.isBlank() || req.accountId.length > MAX_ACCOUNT_ID) throw BadRequestException("bad accountId")
         val envelope = req.envelope.unb64()
         if (envelope.isEmpty() || envelope.size > MAX_ENVELOPE_BYTES) throw BadRequestException("bad envelope")
-        if (call.rejectUnlessOwner(services, teamId, principal.accountId)) return@post
+        val membership = call.requireActiveMember(
+            services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
+        ) ?: return@post
+        // Анти-эскалация: нельзя пригласить с ролью выше собственных прав (напр. admin→admin/owner).
+        if (!TeamRoles.canAssign(membership.role, req.role)) {
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse("cannot assign role '${req.role}'"))
+            return@post
+        }
         if (services.accounts.find(req.accountId) == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no such account"))
             return@post
         }
-        if (!services.teams.invite(teamId, req.accountId, envelope, principal.accountId, System.currentTimeMillis())) {
+        if (!services.teams.invite(teamId, req.accountId, req.role, envelope, principal.accountId, System.currentTimeMillis())) {
             call.respond(HttpStatusCode.Conflict, ErrorResponse("already a member or invited"))
             return@post
         }
-        services.activity.record(principal.accountId, "team.invite", "$teamId · ${req.accountId}")
+        services.activity.record(principal.accountId, "team.invite", "${req.accountId} · ${req.role}", teamId = teamId)
         services.notifier.publishMembership(req.accountId)
         call.respond(HttpStatusCode.Created)
+    }
+
+    put("/teams/{id}/members/{accountId}/role") {
+        val principal = call.jwtPrincipal()
+        val teamId = call.requiredPathId("id") ?: return@put
+        val target = call.requiredPathId("accountId") ?: return@put
+        val req = call.receive<TeamRoleChangeRequest>()
+        val actor = call.requireActiveMember(
+            services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
+        ) ?: return@put
+        val targetMember = services.teams.membership(teamId, target)
+        if (targetMember == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("no such member"))
+            return@put
+        }
+        // Анти-эскалация: актор должен иметь право трогать текущую роль цели И назначать новую.
+        if (!TeamRoles.canModifyMember(actor.role, targetMember.role) || !TeamRoles.canAssign(actor.role, req.role)) {
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse("cannot set role '${req.role}'"))
+            return@put
+        }
+        if (!services.teams.updateRole(teamId, target, req.role)) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("no such member (owner role is fixed)"))
+            return@put
+        }
+        services.activity.record(principal.accountId, "team.role_change", "$target → ${req.role}", teamId = teamId)
+        services.notifier.publishMembership(target)
+        call.respond(HttpStatusCode.OK)
     }
 
     delete("/teams/{id}/members/{accountId}") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@delete
         val target = call.requiredPathId("accountId") ?: return@delete
-        // Удалить может владелец (любого) или сам участник себя (выход/отклонение приглашения).
-        if (target != principal.accountId &&
-            call.rejectUnlessOwner(services, teamId, principal.accountId)
-        ) {
-            return@delete
+        // Удалить может сам участник себя (выход/отклонение приглашения) или управляющий с правом
+        // трогать роль цели (owner — любого; admin — только editor/viewer).
+        if (target != principal.accountId) {
+            val actor = call.requireActiveMember(
+                services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
+            ) ?: return@delete
+            val targetMember = services.teams.membership(teamId, target)
+            if (targetMember != null && !TeamRoles.canModifyMember(actor.role, targetMember.role)) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("cannot remove this member"))
+                return@delete
+            }
         }
         if (!services.teams.removeMember(teamId, target)) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no such member (owner cannot be removed)"))
             return@delete
         }
-        services.activity.record(principal.accountId, "team.remove", "$teamId · $target")
+        services.activity.record(principal.accountId, "team.remove", target, teamId = teamId)
         services.notifier.publishMembership(target)
         call.respond(HttpStatusCode.OK)
     }
@@ -163,14 +210,14 @@ fun Route.teamRoutes(services: Services) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no pending invite"))
             return@post
         }
-        services.activity.record(principal.accountId, "team.accept", teamId)
+        services.activity.record(principal.accountId, "team.accept", "accepted invite", teamId = teamId)
         call.respond(HttpStatusCode.OK)
     }
 
     get("/teams/{id}/records") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@get
-        if (call.rejectUnlessActiveMember(services, teamId, principal.accountId)) return@get
+        call.requireActiveMember(services, teamId, principal.accountId) ?: return@get
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
         val delta = services.teamRecords.delta(teamId, since)
         val cursor = delta.lastOrNull()?.serverSeq ?: since
@@ -181,45 +228,60 @@ fun Route.teamRoutes(services: Services) {
     put("/teams/{id}/records") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@put
-        if (call.rejectUnlessActiveMember(services, teamId, principal.accountId)) return@put
+        // Запись гейтится ролью: viewer активен, но canWrite=false → 403.
+        call.requireActiveMember(
+            services, teamId, principal.accountId, TeamRoles::canWrite, "write role required",
+        ) ?: return@put
         val req = call.receive<PushRequest>()
         val unknown = req.records.firstOrNull { it.type !in TEAM_ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
         val result = services.teamRecords.upsert(teamId, req.records.map { it.toIncoming() })
+        val ids = req.records.joinToString(" ") { it.id }.take(200)
         services.activity.record(
-            principal.accountId, "team.push", "$teamId · ${req.records.size} records · cursor ${result.cursor}",
+            principal.accountId, "team.push", "${req.records.size} records · $ids", teamId = teamId,
         )
         if (result.changed) services.notifier.publishTeam(teamId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))
     }
+
+    get("/teams/{id}/activity") {
+        val principal = call.jwtPrincipal()
+        val teamId = call.requiredPathId("id") ?: return@get
+        call.requireActiveMember(
+            services, teamId, principal.accountId, TeamRoles::canViewAudit, "audit role required",
+        ) ?: return@get
+        val entries = services.activity.recentForTeam(teamId).map {
+            TeamActivityDto(it.accountId, it.event, it.detail, it.createdAt)
+        }
+        call.respond(TeamActivityResponse(entries))
+    }
 }
 
-/** 403/404, если [accountId] — не владелец команды. true = ответ уже отправлен. */
-private suspend fun ApplicationCall.rejectUnlessOwner(services: Services, teamId: String, accountId: String): Boolean {
-    val membership = services.teams.membership(teamId, accountId)
-    if (membership == null) {
-        // Не раскрываем существование чужих команд: не участник видит 404, не 403.
-        respond(HttpStatusCode.NotFound, ErrorResponse("no such team"))
-        return true
-    }
-    if (membership.role != TeamRoles.OWNER) {
-        respond(HttpStatusCode.Forbidden, ErrorResponse("owner role required"))
-        return true
-    }
-    return false
-}
-
-/** 404/403, если [accountId] — не активный участник команды. true = ответ уже отправлен. */
-private suspend fun ApplicationCall.rejectUnlessActiveMember(services: Services, teamId: String, accountId: String): Boolean {
+/**
+ * Возвращает членство [accountId] в команде, если он активный участник и (при заданной [capability])
+ * его роль проходит проверку; иначе отправляет 404 (не участник — не раскрываем команду) / 403 и
+ * возвращает null. Владелец команды тоже проходит capability-проверки (см. [TeamRoles]).
+ */
+private suspend fun ApplicationCall.requireActiveMember(
+    services: Services,
+    teamId: String,
+    accountId: String,
+    capability: ((String) -> Boolean)? = null,
+    forbidMessage: String = "insufficient role",
+): TeamMemberRow? {
     val membership = services.teams.membership(teamId, accountId)
     if (membership == null) {
         respond(HttpStatusCode.NotFound, ErrorResponse("no such team"))
-        return true
+        return null
     }
     if (membership.status != TeamMemberStatus.ACTIVE) {
         respond(HttpStatusCode.Forbidden, ErrorResponse("invite not accepted"))
-        return true
+        return null
     }
-    return false
+    if (capability != null && !capability(membership.role)) {
+        respond(HttpStatusCode.Forbidden, ErrorResponse(forbidMessage))
+        return null
+    }
+    return membership
 }

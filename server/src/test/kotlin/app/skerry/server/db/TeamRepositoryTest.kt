@@ -51,9 +51,9 @@ class TeamRepositoryTest {
         val repo = TeamRepository(db)
         repo.create("team-1", alice, now = 10)
 
-        assertTrue(repo.invite("team-1", bob, envelope = byteArrayOf(7, 7), invitedBy = alice, now = 20))
+        assertTrue(repo.invite("team-1", bob, TeamRoles.EDITOR, envelope = byteArrayOf(7, 7), invitedBy = alice, now = 20))
         // повторное приглашение того же аккаунта — отказ
-        assertFalse(repo.invite("team-1", bob, envelope = byteArrayOf(8), invitedBy = alice, now = 21))
+        assertFalse(repo.invite("team-1", bob, TeamRoles.VIEWER, envelope = byteArrayOf(8), invitedBy = alice, now = 21))
 
         // до принятия: invited, конверт доступен, в активные не входит
         val invited = repo.teamsFor(bob).single()
@@ -68,8 +68,26 @@ class TeamRepositoryTest {
 
         val active = repo.membership("team-1", bob)!!
         assertEquals(TeamMemberStatus.ACTIVE, active.status)
+        assertEquals(TeamRoles.EDITOR, active.role)
         assertNull(active.envelope)
         assertEquals(listOf("team-1"), repo.activeTeamIdsFor(bob))
+    }
+
+    @Test
+    fun `updateRole changes member role but leaves owner fixed`() = withTestDb { db ->
+        seedTwoAccounts(db)
+        val repo = TeamRepository(db)
+        repo.create("team-1", alice, now = 10)
+        repo.invite("team-1", bob, TeamRoles.VIEWER, byteArrayOf(1), alice, now = 20)
+        repo.accept("team-1", bob)
+
+        assertTrue(repo.updateRole("team-1", bob, TeamRoles.ADMIN))
+        assertEquals(TeamRoles.ADMIN, repo.membership("team-1", bob)!!.role)
+
+        // владелец не меняется, несуществующий участник — false
+        assertFalse(repo.updateRole("team-1", alice, TeamRoles.VIEWER))
+        assertEquals(TeamRoles.OWNER, repo.membership("team-1", alice)!!.role)
+        assertFalse(repo.updateRole("team-1", "ghost@example.com", TeamRoles.VIEWER))
     }
 
     @Test
@@ -77,7 +95,7 @@ class TeamRepositoryTest {
         seedTwoAccounts(db)
         val repo = TeamRepository(db)
         repo.create("team-1", alice, now = 10)
-        repo.invite("team-1", bob, byteArrayOf(1), alice, now = 20)
+        repo.invite("team-1", bob, TeamRoles.VIEWER, byteArrayOf(1), alice, now = 20)
         repo.accept("team-1", bob)
 
         assertTrue(repo.removeMember("team-1", bob))
@@ -94,7 +112,7 @@ class TeamRepositoryTest {
         val repo = TeamRepository(db)
         val records = TeamRecordRepository(db)
         repo.create("team-1", alice, now = 10)
-        repo.invite("team-1", bob, byteArrayOf(1), alice, now = 20)
+        repo.invite("team-1", bob, TeamRoles.VIEWER, byteArrayOf(1), alice, now = 20)
         records.upsert("team-1", listOf(IncomingRecord("r1", "HOST", 1, "2026-07-04T00:00:00Z", "devA", false, byteArrayOf(1))))
 
         assertTrue(repo.deleteTeam("team-1"))

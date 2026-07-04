@@ -67,10 +67,49 @@ data class TeamMembershipView(
     }
 }
 
-/** Роли и статусы участников — единственные допустимые значения на проводе и в БД. */
+/**
+ * Роли и статусы участников — единственные допустимые значения на проводе и в БД, плюс
+ * capability-логика ACL (единый источник для маршрутов). Гранулярность гейтит запись/управление,
+ * НЕ чтение: у любого активного участника есть teamKey, поэтому «viewer, не видящий секретов»
+ * криптографически невозможен без ротации ключа. Иерархия прав: OWNER > ADMIN > EDITOR > VIEWER.
+ */
 object TeamRoles {
     const val OWNER = "owner"
+    const val ADMIN = "admin"
+    const val EDITOR = "editor"
+    const val VIEWER = "viewer"
+
+    /** Legacy до гранулярных ролей: любой активный участник мог писать записи — эквивалент EDITOR. */
     const val MEMBER = "member"
+
+    /** Роли, которые можно назначить приглашением/сменой (OWNER фиксирован за создателем). */
+    val ASSIGNABLE = setOf(ADMIN, EDITOR, VIEWER)
+
+    /** Управление участниками: приглашать, удалять, менять роли. */
+    fun canManageMembers(role: String): Boolean = role == OWNER || role == ADMIN
+
+    /** Запись/шеринг команды: push/share/unshare записей. */
+    fun canWrite(role: String): Boolean = role == OWNER || role == ADMIN || role == EDITOR || role == MEMBER
+
+    /** Просмотр аудит-лога команды. */
+    fun canViewAudit(role: String): Boolean = role == OWNER || role == ADMIN
+
+    /** Вправе ли [actorRole] назначить/приглашать роль [targetRole] (анти-эскалация привилегий). */
+    fun canAssign(actorRole: String, targetRole: String): Boolean {
+        if (targetRole !in ASSIGNABLE) return false
+        return when (actorRole) {
+            OWNER -> true
+            ADMIN -> targetRole == EDITOR || targetRole == VIEWER
+            else -> false
+        }
+    }
+
+    /** Вправе ли [actorRole] удалить/сменить участника с ролью [targetRole] (анти-эскалация). */
+    fun canModifyMember(actorRole: String, targetRole: String): Boolean = when (actorRole) {
+        OWNER -> targetRole != OWNER
+        ADMIN -> targetRole == EDITOR || targetRole == VIEWER || targetRole == MEMBER
+        else -> false
+    }
 }
 
 object TeamMemberStatus {
