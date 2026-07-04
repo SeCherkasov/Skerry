@@ -3,6 +3,7 @@ package app.skerry.ui.desktop
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,14 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -955,7 +964,7 @@ private fun IconRail(state: DesktopDesignState) {
     val currentSessionView = sessions?.active?.view?.asDesktopView() ?: state.view
     Column(
         Modifier
-            .width(62.dp)
+            .width(52.dp)
             .fillMaxHeight()
             .background(D.railBg)
             .padding(horizontal = 7.dp, vertical = 8.dp),
@@ -989,7 +998,11 @@ private fun IconRail(state: DesktopDesignState) {
 @Composable
 private fun RailButton(icon: String, label: String, active: Boolean, onClick: () -> Unit) {
     val fg = if (active) D.cyanBright else D.faint
-    Box(Modifier.fillMaxWidth()) {
+    // Иконки без подписей: имя пункта уезжает в tooltip по наведению (desktop), чтобы узкая
+    // колонка не переносила длинные слова («Хранилище», «Настройки»).
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Box(Modifier.fillMaxWidth().hoverable(interaction)) {
         if (active) {
             Box(
                 Modifier
@@ -1004,14 +1017,43 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (active) D.cyan10 else Color.Transparent)
+                .background(if (active) D.cyan10 else if (hovered) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
                 .clickable(onClick = onClick)
-                .padding(vertical = 9.dp),
+                .padding(vertical = 11.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Sym(icon, size = 21.sp, color = fg)
-            Txt(label, color = fg, size = 9.sp, weight = FontWeight.SemiBold, letterSpacing = 0.2.sp)
+        }
+        // Всплывающая подпись справа от рейла — только пока курсор над кнопкой.
+        if (hovered) {
+            val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
+            val position = remember(gap) {
+                object : PopupPositionProvider {
+                    override fun calculatePosition(
+                        anchorBounds: IntRect,
+                        windowSize: IntSize,
+                        layoutDirection: LayoutDirection,
+                        popupContentSize: IntSize,
+                    ): IntOffset = IntOffset(
+                        x = anchorBounds.right + gap,
+                        y = anchorBounds.top + (anchorBounds.height - popupContentSize.height) / 2,
+                    )
+                }
+            }
+            Popup(
+                popupPositionProvider = position,
+                properties = PopupProperties(focusable = false),
+            ) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(D.railBg)
+                        .border(1.dp, D.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Txt(label, color = D.textBright, size = 11.sp, weight = FontWeight.Medium)
+                }
+            }
         }
     }
 }
