@@ -125,7 +125,11 @@ fun TerminalView(state: DesktopDesignState) {
             }
             // Всё в одной строке бара: команда + инлайн-пояснение/причина риска + кнопки; Thinking/blocked/
             // error там же. Ничего не перекрывает терминал и не меняет его высоту (нет «дёрга»). Off/мок → слот.
-            if (aiController != null) AiBarInput(aiController, aiTerminal, state.aiBarFocusRequests) else TerminalAiBarSlot()
+            // AI-бар только при активной сессии: на пустом экране «Нет активной сессии» помощник не нужен.
+            // В дизайн-превью (LocalSessions == null) бар-мок остаётся.
+            if (aiSession != null || LocalSessions.current == null) {
+                if (aiController != null) AiBarInput(aiController, aiTerminal, state.aiBarFocusRequests) else TerminalAiBarSlot()
+            }
         }
     }
 }
