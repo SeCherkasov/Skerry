@@ -3,6 +3,9 @@ package app.skerry.ui
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -383,10 +386,12 @@ fun main() {
             size = optimalWindowSize(DpSize(screen.width.dp, screen.height.dp)),
             position = WindowPosition(Alignment.Center),
         )
+        val appIcon = remember { BitmapPainter(useResource("skerry-icon.png") { loadImageBitmap(it) }) }
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
             title = "Skerry",
+            icon = appIcon,
         ) {
             // Live vault + hosts + sessions + known-hosts are wired up: chrome is behind the master
             // password gate, clicking a host opens a live SSH terminal in a tab (transport+identities
