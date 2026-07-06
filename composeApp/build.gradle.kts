@@ -80,6 +80,10 @@ compose.desktop {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
             packageName = "Skerry"
             packageVersion = "0.1.0"
+            // App icons per platform, rasterized from icons/skerry.svg (canonical mark, docs/design/Skerry Logo.html).
+            linux { iconFile.set(project.file("icons/skerry.png")) }
+            windows { iconFile.set(project.file("icons/skerry.ico")) }
+            macOS { iconFile.set(project.file("icons/skerry.icns")) }
         }
 
         // ProGuard для release ОТКЛЮЧЁН осознанно. Для крипто-стека этого SSH-клиента
