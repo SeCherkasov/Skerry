@@ -17,10 +17,21 @@ class PasswordStrengthTest {
     }
 
     @Test
-    fun short_password_is_weak_regardless_of_variety() {
-        // < 8 chars is always Weak, even with every character class present.
+    fun below_minimum_length_is_weak_regardless_of_variety() {
+        // Anything shorter than MIN_MASTER_PASSWORD_LENGTH is always Weak, even with every
+        // character class present — the meter must not read "Good" while the create button is
+        // still disabled for being too short.
         assertEquals(PasswordStrength.Weak, passwordStrength("aB1!"))
         assertEquals(PasswordStrength.Weak, passwordStrength("abcdefg"))
+        assertEquals(PasswordStrength.Weak, passwordStrength("aB1!aB1!")) // 8 chars, 4 classes
+        assertEquals(PasswordStrength.Weak, passwordStrength("aB1!aB1!ab")) // 10 chars
+        assertEquals(PasswordStrength.Weak, passwordStrength("aB1!aB1!abc")) // 11 chars, one short
+    }
+
+    @Test
+    fun exactly_minimum_length_is_at_least_fair() {
+        // Reaching the minimum length flips the meter off Weak, matching the create button.
+        assertEquals(PasswordStrength.Fair, passwordStrength("aaaaaaaaaaaa")) // 12 chars, 1 class
     }
 
     @Test

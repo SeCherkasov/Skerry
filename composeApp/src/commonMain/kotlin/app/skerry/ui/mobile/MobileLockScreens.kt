@@ -63,6 +63,7 @@ import app.skerry.ui.generated.resources.shell_pairing_link
 import app.skerry.ui.generated.resources.shell_quick_unlock_subtitle
 import app.skerry.ui.generated.resources.shell_quick_unlock_title
 import app.skerry.ui.generated.resources.shell_repeat_password
+import app.skerry.ui.generated.resources.shell_password_min_length
 import app.skerry.ui.generated.resources.shell_reset_confirm_placeholder
 import app.skerry.ui.generated.resources.shell_reset_permanently
 import app.skerry.ui.generated.resources.shell_reset_scope_all_subtitle
@@ -77,6 +78,9 @@ import app.skerry.ui.generated.resources.shell_use_biometrics
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.sync.PairingJoinScreen
 import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
+import app.skerry.ui.vault.PasswordStrength
+import app.skerry.ui.vault.passwordStrength
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGateError
@@ -149,7 +153,11 @@ fun MobileCreateScreen(
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var joining by remember { mutableStateOf(false) }
-    val submit = { if (pwd.isNotEmpty() && confirm.isNotEmpty()) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
+    // "Not Weak" == long enough: passwordStrength() keys Weak to MIN_MASTER_PASSWORD_LENGTH.
+    val strength = passwordStrength(pwd)
+    val strongEnough = strength != null && strength >= PasswordStrength.Fair
+    val canCreate = strongEnough && confirm.isNotEmpty()
+    val submit = { if (canCreate) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
     // Blocks screenshots/Recent Apps preview of the master password fields (Android; no-op on desktop).
     SecureScreen()
 
@@ -164,10 +172,20 @@ fun MobileCreateScreen(
         error = error,
     ) {
         MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next)
+        if (strength != null && !strongEnough) {
+            Spacer(Modifier.height(8.dp))
+            Txt(stringResource(Res.string.shell_password_min_length, MIN_MASTER_PASSWORD_LENGTH), color = D.amber, size = 12.sp)
+        }
         Spacer(Modifier.height(12.dp))
         MobileLockField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
-        MobileWideButton(stringResource(Res.string.shell_create_vault), onClick = submit)
+        MobileWideButton(
+            stringResource(Res.string.shell_create_vault),
+            onClick = submit,
+            bg = if (canCreate) D.cyan else Color(0x14FFFFFF),
+            fg = if (canCreate) D.ink else D.faint,
+            enabled = canCreate,
+        )
         if (sync != null && onPairingComplete != null) {
             Spacer(Modifier.height(18.dp))
             Txt(

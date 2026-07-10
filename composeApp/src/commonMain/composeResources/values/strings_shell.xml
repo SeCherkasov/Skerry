@@ -22,6 +22,7 @@
     <string name="shell_password_strength_fair">Fair</string>
     <string name="shell_password_strength_good">Good</string>
     <string name="shell_password_strength_strong">Strong</string>
+    <string name="shell_password_min_length">Use at least %1$d characters to create the vault</string>
 
     <string name="shell_quick_unlock_title">Quick unlock</string>
     <string name="shell_quick_unlock_subtitle">Open Skerry with your fingerprint instead of the master password.</string>
