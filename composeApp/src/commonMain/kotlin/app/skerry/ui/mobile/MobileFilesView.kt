@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,9 +33,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -176,7 +188,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     val downloadHere = remember(c) {
                         { item: FileItem -> c.remote.selectOnly(item); c.downloadSelection() }
                     }
-                    MobileFilesBreadcrumbRow(pane.label, pane.path, mono)
+                    MobileFilesBreadcrumbRow(pane.label, pane.path, mono, onGoToPath = pane::goToPath)
                     MobileLivePane(
                         pane = pane,
                         mono = mono,
@@ -471,24 +483,95 @@ private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
     }
 }
 
-/** Breadcrumb row below the title: host icon (dns) + "label : path" of the active Remote session. */
+/**
+ * Breadcrumb row below the title: host icon (dns) + "label : path" of the active Remote session.
+ * When [onGoToPath] is supplied (live mode) the crumb is tappable: it turns into a path input so a
+ * known destination can be typed and jumped to (IME "Go" → [onGoToPath], blur → cancel). The editor
+ * closes on its own once the pane navigates (the row re-keys on [path]); the mock passes no callback.
+ */
 @Composable
-private fun MobileFilesBreadcrumbRow(label: String, path: String, mono: FontFamily) {
+private fun MobileFilesBreadcrumbRow(
+    label: String,
+    path: String,
+    mono: FontFamily,
+    onGoToPath: ((String) -> Unit)? = null,
+) {
+    var editing by remember(path) { mutableStateOf(false) }
     Row(
         Modifier.padding(start = 22.dp, end = 22.dp, top = 4.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Sym("dns", size = 16.sp, color = D.moss)
-        Txt(
-            mobileFilesBreadcrumb(label, path),
-            color = D.dim,
-            size = 12.sp,
-            font = mono,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (editing && onGoToPath != null) {
+            MobileBreadcrumbPathField(
+                path = path,
+                mono = mono,
+                onGo = { onGoToPath(it); editing = false },
+                onCancel = { editing = false },
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Txt(
+                mobileFilesBreadcrumb(label, path),
+                color = D.dim,
+                size = 12.sp,
+                font = mono,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (onGoToPath != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { editing = true }
+                } else {
+                    Modifier
+                },
+            )
+        }
     }
+}
+
+/**
+ * Compact path input inside the breadcrumb (type-to-jump). Prefilled with the current [path], fully
+ * selected so typing replaces it; IME "Go" commits via [onGo], losing focus (tapping away) calls
+ * [onCancel]. A [KeyboardType.Uri] keyboard keeps "/" handy and turns autocorrect off.
+ */
+@Composable
+private fun MobileBreadcrumbPathField(
+    path: String,
+    mono: FontFamily,
+    onGo: (String) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier,
+) {
+    var draft by remember { mutableStateOf(TextFieldValue(path, TextRange(0, path.length))) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    // Ignore the initial unfocused frame before requestFocus lands, then cancel on any real blur.
+    var everFocused by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        singleLine = true,
+        textStyle = TextStyle(color = D.text, fontSize = 12.sp, fontFamily = mono),
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+        keyboardActions = KeyboardActions(onGo = { onGo(draft.text) }),
+        modifier = modifier
+            .focusRequester(focus)
+            .onFocusChanged { if (it.isFocused) everFocused = true else if (everFocused) onCancel() },
+        decorationBox = { inner ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(D.bg)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            ) { inner() }
+        },
+    )
 }
 
 /** Round "+" FAB for Files — the shared [MobileFabButton]; when expanded, [open] shows "x" to collapse. */
