@@ -168,4 +168,41 @@ class TerminalGeometryTest {
     fun `stick to bottom while content is shorter than the viewport`() {
         assertTrue(shouldStickToBottom(value = 0, previousMax = 0, slackPx = 18))
     }
+
+    // TerminalAutoScroll: per-emission snap decision for the terminal viewport.
+
+    @Test
+    fun `autoscroll snaps on the first emission after (re)attach`() {
+        // A freshly (re)created screen starts with scroll value 0 over existing scrollback: the
+        // first emission must land at the live screen, not at the top of history.
+        val auto = TerminalAutoScroll(initialInputVersion = 0, slackPx = 18)
+        assertTrue(auto.shouldSnap(value = 0, max = 5000, inputVersion = 0))
+    }
+
+    @Test
+    fun `autoscroll keeps following output after the initial snap`() {
+        val auto = TerminalAutoScroll(initialInputVersion = 0, slackPx = 18)
+        auto.shouldSnap(value = 0, max = 1000, inputVersion = 0)
+        // At the bottom (value == previous max): new output keeps sticking.
+        assertTrue(auto.shouldSnap(value = 1000, max = 1100, inputVersion = 0))
+        assertTrue(auto.shouldSnap(value = 1100, max = 1200, inputVersion = 0))
+    }
+
+    @Test
+    fun `autoscroll leaves a viewport scrolled into history alone`() {
+        val auto = TerminalAutoScroll(initialInputVersion = 0, slackPx = 18)
+        auto.shouldSnap(value = 1000, max = 1000, inputVersion = 0)
+        // Scrolled up to read history: streaming output must not yank the viewport down.
+        assertFalse(auto.shouldSnap(value = 400, max = 1100, inputVersion = 0))
+        assertFalse(auto.shouldSnap(value = 400, max = 1200, inputVersion = 0))
+    }
+
+    @Test
+    fun `autoscroll snaps on user input even when scrolled into history`() {
+        val auto = TerminalAutoScroll(initialInputVersion = 7, slackPx = 18)
+        auto.shouldSnap(value = 1000, max = 1000, inputVersion = 7)
+        auto.shouldSnap(value = 400, max = 1100, inputVersion = 7)
+        // xterm's scroll-on-keypress: typing returns to the live screen.
+        assertTrue(auto.shouldSnap(value = 400, max = 1100, inputVersion = 8))
+    }
 }

@@ -100,6 +100,7 @@ import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.ui.design.ModalPresence
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -248,7 +249,11 @@ fun TerminalScreen(
     // soft keyboard right on connect, pushing the layout/terminal up. The keyboard appears on user tap
     // (gesture handler below, the usual mobile SSH client behavior); the special-key panel works without it (sends to
     // the PTY directly).
-    LaunchedEffect(state) { if (!closed && !imeInput) focusRequester.requestFocus() }
+    // Also re-keyed on the open-modal count: a modal scrim takes keyboard focus for Esc handling and
+    // its disposal clears focus to no one, so the terminal re-claims it once every modal is closed —
+    // otherwise typing goes dead until the user clicks the terminal.
+    val modalsOpen = ModalPresence.openCount
+    LaunchedEffect(state, modalsOpen) { if (!closed && !imeInput && modalsOpen == 0) focusRequester.requestFocus() }
 
     // Autoscroll to bottom on new output — but only when the user was already at the bottom
     // (sticky bottom, like a real terminal): scrolling up to read history must survive streaming
@@ -261,16 +266,10 @@ fun TerminalScreen(
     // this always lands on the actual bottom (or top, if content shrank).
     LaunchedEffect(state, metrics) {
         // "At the bottom" tolerance: a couple of rows, absorbing the sub-row slack below the grid.
-        val slackPx = (2 * metrics.cellHeight).roundToInt()
-        var lastMax = scroll.maxValue
-        var lastInput = state.inputVersion
+        val autoScroll = TerminalAutoScroll(state.inputVersion, slackPx = (2 * metrics.cellHeight).roundToInt())
         snapshotFlow { Triple(state.snapshotVersion, state.inputVersion, scroll.maxValue) }
             .collect { (_, input, max) ->
-                val typed = input != lastInput
-                lastInput = input
-                val stick = typed || shouldStickToBottom(scroll.value, lastMax, slackPx)
-                lastMax = max
-                if (stick) scroll.scrollTo(max)
+                if (autoScroll.shouldSnap(scroll.value, max, input)) scroll.scrollTo(max)
             }
     }
 
@@ -525,9 +524,13 @@ fun TerminalScreen(
               val scrollPx = scroll.value.toFloat()
               val cw = metrics.cellWidth
               val chh = metrics.cellHeight
-              for (r in screen.indices) {
+              // Only the rows intersecting the viewport (±1 row of slack; clipToBounds cuts the
+              // spill): walking all of scrollback per repaint is O(history) of wasted work
+              // whenever output streams while the user sits scrolled up in history.
+              val firstRow = ((scrollPx / chh).toInt() - 1).coerceAtLeast(0)
+              val lastRow = (((scrollPx + size.height) / chh).toInt() + 1).coerceAtMost(screen.lastIndex)
+              for (r in firstRow..lastRow) {
                   val top = r * chh - scrollPx
-                  if (top + chh < 0f || top > size.height) continue
                   val row = screen[r]
                   // 1) Cell backgrounds — collapse same-color runs; stretch the trailing run to the viewport edge.
                   var c = 0

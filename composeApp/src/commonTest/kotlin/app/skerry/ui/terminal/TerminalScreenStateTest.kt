@@ -86,6 +86,23 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `sendUserInput forwards to the session and bumps inputVersion`() = runTest {
+        // Keybar keys, snippet runs, and AI-confirmed commands are user-initiated: they must snap
+        // a scrolled-up viewport back to the live screen (unlike programmatic send), but must not
+        // feed autocomplete (unlike typeInput).
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        val v0 = state.inputVersion
+        state.sendUserInput("uptime\r")
+
+        assertContentEquals("uptime\r".encodeToByteArray(), session.sent.single())
+        assertEquals(v0 + 1, state.inputVersion)
+        scope.cancel()
+    }
+
+    @Test
     fun `preloaded history feeds autosuggestion`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val state = TerminalScreenState(

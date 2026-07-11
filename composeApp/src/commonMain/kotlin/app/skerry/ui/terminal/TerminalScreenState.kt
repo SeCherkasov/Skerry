@@ -541,6 +541,17 @@ class TerminalScreenState(
     }
 
     /**
+     * [send] for user-pressed input that must not feed autocomplete: keybar control sequences,
+     * snippet output, an AI-confirmed command. Bumps [inputVersion] so the viewport snaps back to
+     * the live screen like [typeInput] — unlike plain [send], whose programmatic traffic
+     * (mouse/DSR/focus reports) must never yank the viewport.
+     */
+    fun sendUserInput(text: String) {
+        inputVersion++
+        send(text)
+    }
+
+    /**
      * Send raw bytes to the PTY (fire-and-forget). Used for mouse reports: legacy encoding bytes
      * can exceed 0x7f and must not be run through UTF-8 like [send] does.
      */

@@ -35,13 +35,6 @@ fun gridSizeFor(
 }
 
 /**
- * Converts a pointer position into a grid cell. Coordinates already arrive in the terminal content's
- * coordinate system: `pointerInput` sits after `verticalScroll` and `padding` in the modifier chain,
- * so Compose gives an offset relative to the text (scroll accounted for, padding excluded) — only
- * dividing by cell size remains. Row/column are floored; negative coordinates clamp to zero. Row isn't
- * upper-bounded here; the caller maps it against the screen (extract clamps past the last row).
- */
-/**
  * Whether the viewport should snap to the bottom after new output: only when the user was already
  * at (or within [slackPx] of) the bottom *before* the content grew — scrolling up to read history
  * must survive streaming output, like in a real terminal. [previousMax] is the scroll max before
@@ -50,6 +43,35 @@ fun gridSizeFor(
 fun shouldStickToBottom(value: Int, previousMax: Int, slackPx: Int): Boolean =
     value >= previousMax - slackPx
 
+/**
+ * Per-emission autoscroll decision for the terminal viewport, one instance per collect loop. The
+ * first emission always snaps: a freshly (re)attached screen starts with scroll value 0 over
+ * existing scrollback while the previous max is not yet meaningful, so [shouldStickToBottom] alone
+ * would leave it stuck at the top of history. After that: user input ([inputVersion] changed)
+ * snaps unconditionally (xterm's scroll-on-keypress), otherwise the sticky-bottom rule applies
+ * against the max *before* this emission's relayout.
+ */
+class TerminalAutoScroll(initialInputVersion: Int, private val slackPx: Int) {
+    private var previousMax: Int? = null
+    private var lastInput = initialInputVersion
+
+    /** Whether to snap to the bottom for this (scroll value, new scroll max, input version) emission. */
+    fun shouldSnap(value: Int, max: Int, inputVersion: Int): Boolean {
+        val typed = inputVersion != lastInput
+        lastInput = inputVersion
+        val previous = previousMax
+        previousMax = max
+        return typed || previous == null || shouldStickToBottom(value, previous, slackPx)
+    }
+}
+
+/**
+ * Converts a pointer position into a grid cell. Coordinates already arrive in the terminal content's
+ * coordinate system: `pointerInput` sits after `verticalScroll` and `padding` in the modifier chain,
+ * so Compose gives an offset relative to the text (scroll accounted for, padding excluded) — only
+ * dividing by cell size remains. Row/column are floored; negative coordinates clamp to zero. Row isn't
+ * upper-bounded here; the caller maps it against the screen (extract clamps past the last row).
+ */
 fun cellAtOffset(x: Float, y: Float, metrics: TerminalMetrics): TerminalPos {
     val col = (x / metrics.cellWidth).toInt().coerceAtLeast(0)
     val row = (y / metrics.cellHeight).toInt().coerceAtLeast(0)

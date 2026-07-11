@@ -683,7 +683,7 @@ private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions
     ) ?: return false
     val entry = manager.forShortcut(combo) ?: return false
     val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
-    manager.run(entry.id) { terminal.send(it) }
+    manager.run(entry.id) { terminal.sendUserInput(it) }
     return true
 }
 
