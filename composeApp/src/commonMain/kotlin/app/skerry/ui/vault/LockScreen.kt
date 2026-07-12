@@ -362,7 +362,6 @@ private fun LockScaffold(
         Modifier
             .fillMaxSize()
             .background(Brush.radialGradient(colors = listOf(Color(0xFF122332), D.bg)))
-            .clickable(enabled = false) {}
             .padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
