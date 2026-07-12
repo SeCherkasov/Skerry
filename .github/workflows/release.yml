@@ -175,12 +175,16 @@ jobs:
           ./gradlew :composeApp:packageDmg --stacktrace
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
-      - name: Suffix dmg with the architecture
-        # Both matrix legs emit Skerry-<version>.dmg; disambiguate before the release
-        # step flattens everything into one directory.
+      - name: Rename dmg to the real version and suffix the architecture
+        # jpackage forces the mac bundle version's major to >=1 (see build.gradle.kts), so
+        # the emitted file is Skerry-1.x.y.dmg. Rename it back to the release version and
+        # disambiguate the matrix legs before the release step flattens everything.
+        # On a manual run without a version, fall back to the gradle.properties default.
         run: |
+          version="${{ needs.version.outputs.name }}"
+          [ -z "$version" ] && version="$(sed -n 's/^skerry.versionName=//p' gradle.properties)"
           cd composeApp/build/compose/binaries/main/dmg
-          for f in *.dmg; do mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"; done
+          for f in *.dmg; do mv "$f" "Skerry-${version}-${{ matrix.arch }}.dmg"; done
 
       - name: Upload macOS distributable
         uses: actions/upload-artifact@v7

@@ -58,8 +58,9 @@ Grab a package from the **[latest release](../../releases/latest)**:
 
 - **macOS builds are unsigned and not notarized** (no Apple Developer account yet), so
   Gatekeeper blocks the first launch: right-click the app → Open, or allow it under
-  System Settings → Privacy & Security. The `.dmg` file name carries a `1.x.y` version —
-  it is the same `0.x` release (macOS packaging requires a major version ≥ 1).
+  System Settings → Privacy & Security. The app's bundle metadata (Finder's Get Info)
+  shows a `1.x.y` version — it is the same `0.x` release (macOS packaging requires a
+  major version ≥ 1); the About screen shows the real version.
 - The Windows `.msi` is not code-signed either; SmartScreen may warn on first run.
 - Verify downloads against the attached checksums: `sha256sum -c --ignore-missing SHA256SUMS.txt`.
 
