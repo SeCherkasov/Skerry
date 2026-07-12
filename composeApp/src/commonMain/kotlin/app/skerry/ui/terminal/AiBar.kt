@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,6 +61,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import org.jetbrains.compose.resources.stringResource
 
 // Terminal AI bar: live input under per-host policy, or a decorative mock preview.
+
+/**
+ * Idle height of the AI bar (28dp lead icon + 2x10dp padding). The sidebar footer with the
+ * "New connection" button matches it so the two bottom strips share one top line; the AI bar
+ * itself can grow past it when a pending command wraps.
+ */
+internal val BOTTOM_BAR_HEIGHT = 48.dp
 
 /**
  * Decides whether to show the terminal AI bar and in what mode. With a live controller ([LocalAi]),
@@ -118,6 +126,7 @@ internal fun AiBarInput(
         HLine()
         Row(
             Modifier.fillMaxWidth()
+                .heightIn(min = BOTTOM_BAR_HEIGHT)
                 .background(if (pending != null) accent.copy(alpha = 0.08f) else D.surface2)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -212,7 +221,7 @@ private fun AiBarMock() {
     Column {
         HLine()
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = BOTTOM_BAR_HEIGHT).background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

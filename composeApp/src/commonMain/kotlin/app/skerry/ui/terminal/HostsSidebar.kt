@@ -242,7 +242,8 @@ internal fun HostsSidebar(state: DesktopDesignState) {
             }
         }
         HLine()
-        Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        // Fixed to the AI bar's idle height so both bottom strips share one top line.
+        Box(Modifier.height(BOTTOM_BAR_HEIGHT).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             PrimaryButton(stringResource(Res.string.term_new_connection), onClick = state::openModal, icon = "add_link", modifier = Modifier.fillMaxWidth())
         }
     }
