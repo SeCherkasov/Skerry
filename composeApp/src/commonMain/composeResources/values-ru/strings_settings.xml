@@ -60,7 +60,9 @@
 
     <!-- Раздел Terminal -->
     <string name="settings_terminal_title">Терминал</string>
-    <string name="settings_terminal_subtitle">Поведение шелла, история прокрутки и звонок.</string>
+    <string name="settings_terminal_subtitle">Тема и шрифт; прокрутка и поведение шелла.</string>
+    <string name="settings_terminal_section_font">ШРИФТ</string>
+    <string name="settings_terminal_section_behavior">ПОВЕДЕНИЕ</string>
     <string name="settings_terminal_scrollback">Буфер прокрутки</string>
     <string name="settings_terminal_scrollback_desc">Сколько строк хранить на сессию.</string>
     <string name="settings_terminal_cursor_style">Стиль курсора</string>
