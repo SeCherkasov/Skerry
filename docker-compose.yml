@@ -5,6 +5,9 @@
 
 services:
   sync:
+    # Prebuilt multi-arch image from Docker Hub — swap it for the build: block
+    # to skip compiling from source:
+    # image: secherkasov/skerry-sync:latest
     build:
       context: .
       dockerfile: server/Dockerfile

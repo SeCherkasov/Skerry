@@ -1,0 +1,175 @@
+# Sync-server Docker image. The server ships on its own cadence, decoupled from the
+# client releases (tags v*):
+#   • Push to main / PR touching the server: build the image for both architectures and
+#     smoke-test it (the container must report healthy) — nothing is published.
+#   • Tag server-v* (e.g. server-v0.1.2): the same build + smoke test, then both
+#     architectures are pushed by digest and a multi-arch manifest is published to
+#     Docker Hub as <version>, <major.minor> and latest.
+# Publishing needs the DOCKERHUB_USERNAME + DOCKERHUB_TOKEN secrets (a Docker Hub access
+# token with Read & Write scope). Multi-arch is built on native runners — no QEMU: a
+# Gradle build under emulation is unreasonably slow.
+name: Server image
+
+on:
+  push:
+    branches: [main]
+    # The paths filter applies to branch pushes only; tag pushes always run (GitHub
+    # evaluates paths for branches, never for tags) — exactly what a release needs.
+    tags: ["server-v*"]
+    paths:
+      - "server/**"
+      - "sync-wire/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "gradlew*"
+      - "settings.gradle.kts"
+      - ".dockerignore"
+      - ".github/workflows/server-image.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - "sync-wire/**"
+      - "gradle/**"
+      - "gradle.properties"
+      - "gradlew*"
+      - "settings.gradle.kts"
+      - ".dockerignore"
+      - ".github/workflows/server-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: secherkasov/skerry-sync
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: skerry-sync:smoke
+
+      - name: Smoke test — the container must become healthy
+        # SKERRY_DEV=1 unlocks the default JWT secret. The image's HEALTHCHECK hits
+        # /healthz, so waiting for "healthy" validates both the server start and the
+        # healthcheck itself. First probe fires at ~30s (interval), hence the long loop.
+        run: |
+          docker run -d --name smoke -e SKERRY_DEV=1 skerry-sync:smoke
+          for _ in $(seq 1 30); do
+            state="$(docker inspect -f '{{.State.Health.Status}}' smoke || true)"
+            [ "$state" = healthy ] && exit 0
+            [ "$state" = unhealthy ] && break
+            sleep 5
+          done
+          echo "::error::container never became healthy (state: $state)"
+          docker logs smoke
+          exit 1
+
+      - name: Log in to Docker Hub
+        if: startsWith(github.ref, 'refs/tags/server-v')
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: OCI labels
+        if: startsWith(github.ref, 'refs/tags/server-v')
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # server-v0.1.2 → version label 0.1.2. Title/licenses are overridden because the
+          # defaults come from the GitHub repo (SkerrySSH, GPL-3.0) — the image is the
+          # AGPL-licensed sync server, not the client.
+          tags: |
+            type=match,pattern=server-v(.*),group=1
+          labels: |
+            org.opencontainers.image.title=Skerry Sync
+            org.opencontainers.image.description=Self-hosted zero-knowledge E2E sync server for the Skerry SSH client
+            org.opencontainers.image.licenses=AGPL-3.0-only
+
+      - name: Push by digest
+        # Re-runs the build with the buildx cache warm from the smoke build, so this is
+        # just a push. Tags are applied to the merged manifest in the publish job.
+        if: startsWith(github.ref, 'refs/tags/server-v')
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        if: startsWith(github.ref, 'refs/tags/server-v')
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="${{ steps.push.outputs.digest }}"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: startsWith(github.ref, 'refs/tags/server-v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+
+  # Merges the per-arch digests into one multi-arch manifest and tags it. Runs only on a
+  # server-v* tag; on PRs/main pushes the workflow is validation-only.
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/server-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push the multi-arch manifest
+        # server-v0.1.2 → tags 0.1.2, 0.1, latest
+        run: |
+          version="${GITHUB_REF_NAME#server-v}"
+          minor="${version%.*}"
+          cd digests
+          docker buildx imagetools create \
+            -t "$IMAGE:$version" -t "$IMAGE:$minor" -t "$IMAGE:latest" \
+            $(printf "$IMAGE@sha256:%s " *)
+
+      - name: Inspect the published manifest
+        run: docker buildx imagetools inspect "$IMAGE:${GITHUB_REF_NAME#server-v}"

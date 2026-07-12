@@ -20,7 +20,26 @@ unavailable to the server.
 
 ## Quick start
 
-### Docker (recommended)
+### Docker (prebuilt image, recommended)
+
+Multi-arch images (amd64 + arm64) are published to Docker Hub as
+[`secherkasov/skerry-sync`](https://hub.docker.com/r/secherkasov/skerry-sync) — tags:
+exact `<version>`, `<major.minor>`, `latest`. The server is released on its own cadence,
+independently of the Skerry client versions.
+
+```bash
+docker run -d --name skerry-sync \
+  -p 8080:8080 \
+  -e SKERRY_JWT_SECRET="$(openssl rand -base64 48)" \
+  -e SKERRY_ADMIN_TOKEN="$(openssl rand -hex 16)" \
+  -v skerry-data:/data \
+  secherkasov/skerry-sync:latest
+```
+
+Keep `SKERRY_JWT_SECRET` stable across container re-creation (store it in an env file) —
+changing it invalidates all issued tokens.
+
+### Docker Compose (build from source)
 
 ```bash
 # from the repository root
@@ -29,9 +48,9 @@ export SKERRY_ADMIN_TOKEN="$(openssl rand -hex 16)"
 docker compose up -d --build
 ```
 
-The server comes up on `http://localhost:8080`. Data lives in the `skerry-data` volume
-(SQLite). To switch to PostgreSQL, uncomment the `db` service and the postgres variables in
-`docker-compose.yml`.
+Either way the server comes up on `http://localhost:8080`. Data lives in the `skerry-data`
+volume (SQLite). To switch to PostgreSQL, uncomment the `db` service and the postgres
+variables in `docker-compose.yml`.
 
 The container runs as an unprivileged user, exposes a `/healthz` healthcheck, and the image
 builds with `-PserverOnly` — no Android SDK required.

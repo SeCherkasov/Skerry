@@ -6,6 +6,7 @@ name: Release build
 #   • Tag push (v*): builds with the version taken from the tag, then publishes a DRAFT
 #     GitHub Release with the packages + SHA256SUMS attached. A human reviews the draft
 #     and clicks Publish — nothing goes public automatically.
+# The sync server is released separately (tags server-v*) — see server-image.yml.
 on:
   workflow_dispatch:
     inputs:

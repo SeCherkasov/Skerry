@@ -203,16 +203,21 @@ Skerry — local-first: приложение полностью работает
 зашифрованные записи vault) и метаданные синхронизации. Аутентификация — SRP-6a: сам пароль
 никогда не передаётся, и расшифровать ваши данные сервер не может.
 
-Быстрый старт (один контейнер, SQLite в именованном томе — нулевая настройка):
+Быстрый старт (готовый мультиархитектурный образ с
+[Docker Hub](https://hub.docker.com/r/secherkasov/skerry-sync), SQLite в именованном томе —
+нулевая настройка):
 
 ```bash
-export SKERRY_JWT_SECRET="$(openssl rand -base64 48)"    # обязательно: с дефолтом сервер не стартует
-export SKERRY_ADMIN_TOKEN="$(openssl rand -hex 16)"      # опционально: включает дашборд /console
-docker compose up -d --build
+docker run -d --name skerry-sync -p 8080:8080 \
+  -e SKERRY_JWT_SECRET="$(openssl rand -base64 48)" \
+  -e SKERRY_ADMIN_TOKEN="$(openssl rand -hex 16)" \
+  -v skerry-data:/data \
+  secherkasov/skerry-sync:latest
 ```
 
 Сервер слушает `http://localhost:8080` и несёт встроенную, полностью офлайновую
-админ-консоль на `/console`. Для PostgreSQL раскомментируйте сервис `db` и
+админ-консоль на `/console`. Для сборки из исходников выполните из корня репозитория
+`docker compose up -d --build`; для PostgreSQL раскомментируйте сервис `db` и
 postgres-переменные в [docker-compose.yml](docker-compose.yml). Сборка только сервера не
 требует Android SDK: `./gradlew :server:run -PserverOnly`.
 

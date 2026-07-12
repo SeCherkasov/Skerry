@@ -202,18 +202,23 @@ The server is zero-knowledge by design: it stores only ciphertext (the wrapped `
 encrypted vault records) and sync metadata. It authenticates clients with SRP-6a — the
 password itself is never transmitted — and cannot decrypt anything you store.
 
-Quick start (single container, SQLite in a named volume — zero configuration):
+Quick start (prebuilt multi-arch image from
+[Docker Hub](https://hub.docker.com/r/secherkasov/skerry-sync), SQLite in a named volume —
+zero configuration):
 
 ```bash
-export SKERRY_JWT_SECRET="$(openssl rand -base64 48)"    # required: server refuses the default
-export SKERRY_ADMIN_TOKEN="$(openssl rand -hex 16)"      # optional: enables the /console dashboard
-docker compose up -d --build
+docker run -d --name skerry-sync -p 8080:8080 \
+  -e SKERRY_JWT_SECRET="$(openssl rand -base64 48)" \
+  -e SKERRY_ADMIN_TOKEN="$(openssl rand -hex 16)" \
+  -v skerry-data:/data \
+  secherkasov/skerry-sync:latest
 ```
 
 The server listens on `http://localhost:8080` and ships a built-in, fully offline admin
-console at `/console`. For PostgreSQL, uncomment the `db` service and the postgres variables
-in [docker-compose.yml](docker-compose.yml). A server-only Gradle build needs no Android SDK:
-`./gradlew :server:run -PserverOnly`.
+console at `/console`. To build from source instead, run `docker compose up -d --build`
+from the repository root; for PostgreSQL, uncomment the `db` service and the postgres
+variables in [docker-compose.yml](docker-compose.yml). A server-only Gradle build needs no
+Android SDK: `./gradlew :server:run -PserverOnly`.
 
 The full deployment guide — configuration reference, API endpoints, TLS termination
 (Caddy/nginx), backups, and the privacy model — lives in
