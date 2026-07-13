@@ -78,7 +78,15 @@ fun Application.configureServer(services: Services) {
     // Forward-compat: ignore unknown JSON fields (old client vs. new server). Field typos go
     // undetected as a tradeoff for a versionable API.
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
-    install(WebSockets) { pingPeriodMillis = 30_000 }
+    // The /sync protocol is server-push only: a legitimate client never sends payload frames,
+    // so a tiny frame cap (close code 1009 on violation) stops an authenticated device from
+    // buffering an arbitrarily large frame into server memory — the HTTP body limit below does
+    // not apply to WebSocket traffic. The timeout reaps dead peers that stop answering pings.
+    install(WebSockets) {
+        pingPeriodMillis = 30_000
+        timeoutMillis = 15_000
+        maxFrameSize = 4096
+    }
     install(CallLogging) { level = Level.INFO }
     // Security headers on every response. CSP is locked to 'self' (API returns JSON, admin
     // console is same-origin with no external resources); inline style/script are allowed

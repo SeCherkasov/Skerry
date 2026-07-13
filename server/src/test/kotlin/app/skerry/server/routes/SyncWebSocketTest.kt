@@ -49,6 +49,28 @@ class SyncWebSocketTest {
     }
 
     @Test
+    fun `oversized client frame closes the session instead of being buffered`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+            install(WebSockets)
+        }
+        val tokens: TokenResponse = client.registerAccount(accountId, password)
+
+        client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
+            withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
+            // The protocol is server-push only: the client never has a reason to send a large
+            // frame, so anything above the frame cap must terminate the session, not buffer.
+            send(Frame.Text("x".repeat(1024 * 1024)))
+            val reason = withTimeout(2_000) { closeReason.await() }
+            assertEquals(CloseReason.Codes.TOO_BIG.code, reason?.code)
+        }
+
+        withTimeout(2_000) { services.notifier.subscriptions.first { it == 0 } }
+    }
+
+    @Test
     fun `revoked device is disconnected with VIOLATED_POLICY on next notification`() = testApplication {
         val services = testServices()
         application { configureServer(services) }
