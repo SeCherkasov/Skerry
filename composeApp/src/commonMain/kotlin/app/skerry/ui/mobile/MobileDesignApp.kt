@@ -47,6 +47,7 @@ import app.skerry.ui.sync.SyncOnboardingScreen
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
+import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.generated.resources.Res
@@ -128,12 +129,29 @@ fun MobileDesignApp(
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
-                controllerFactory = { ConnectionController(t, scope, history = termHistory) },
+                controllerFactory = {
+                    ConnectionController(
+                        t, scope, history = termHistory,
+                        // OSC 52 clipboard-write gate is read at connect time — new sessions pick up
+                        // the current choice, already-open ones are updated live below.
+                        terminalPrefs = { TerminalSessionPrefs(clipboardWriteEnabled = state.allowServerClipboardWrite) },
+                    )
+                },
             )
         }
     }
     val ownsSessions = sessions == null
     DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
+    // Toggling the OSC 52 clipboard-write gate applies to ALREADY open sessions live; new sessions
+    // pick the value up at connect via terminalPrefs above.
+    val allowClipboardWrite = state.allowServerClipboardWrite
+    LaunchedEffect(allowClipboardWrite, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.sessions.forEach { s ->
+            s.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite)
+            s.splitSession?.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite)
+        }
+    }
     // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison); without
     // remember a new instance on every recomposition would force a rebuild of the terminal subtree.
     val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {

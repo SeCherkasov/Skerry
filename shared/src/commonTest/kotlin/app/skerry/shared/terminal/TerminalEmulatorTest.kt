@@ -268,7 +268,7 @@ class TerminalEmulatorTest {
         val emu = TerminalEmulator(onClipboardCopy = { copied += it })
         emu.feed("$esc]52;c;aGVsbG8=$esc\\".encodeToByteArray())
         assertTrue(copied.isEmpty())
-        emu.clipboardWriteEnabled = true
+        emu.applyClipboardWrite(true)
         emu.feed("$esc]52;c;d29ybGQ=$esc\\".encodeToByteArray()) // base64 "world"
         assertEquals(listOf("world"), copied)
     }

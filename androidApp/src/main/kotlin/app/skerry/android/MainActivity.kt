@@ -147,6 +147,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontChange = { writeTerminalFont(dir, it) },
                     initialTerminalFontSize = readTerminalFontSize(dir),
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
+                    initialAllowServerClipboardWrite = readClipboardWrite(dir),
+                    onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialAutoLock = readAutoLock(dir),
@@ -210,6 +212,20 @@ class MainActivity : FragmentActivity() {
         val id = duration.id
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "auto_lock").writeText(id) }
+        }
+    }
+
+    /**
+     * OSC 52 server clipboard-write gate (More → Appearance → Terminal): "true"/"false" in
+     * `terminal_clipboard_write`. Missing/unreadable → false (off by default). Best-effort, off the UI thread.
+     */
+    private fun readClipboardWrite(dir: File): Boolean = runCatching {
+        File(dir, "terminal_clipboard_write").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeClipboardWrite(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
         }
     }
 
@@ -401,6 +417,7 @@ class MainActivity : FragmentActivity() {
                 knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
+                writeClipboardWrite(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
             }

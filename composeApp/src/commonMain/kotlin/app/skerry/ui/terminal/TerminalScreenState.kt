@@ -256,7 +256,7 @@ class TerminalScreenState(
             is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
             is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
             is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
-            is TerminalCommand.SetClipboardWriteEnabled -> emulator.clipboardWriteEnabled = cmd.enabled
+            is TerminalCommand.SetClipboardWriteEnabled -> emulator.applyClipboardWrite(cmd.enabled)
             is TerminalCommand.Resize -> {
                 // PTY is resized first, the emulator only on success: otherwise the grid would be
                 // wider than the application knows and the tail of rows would stay undrawn. A PTY

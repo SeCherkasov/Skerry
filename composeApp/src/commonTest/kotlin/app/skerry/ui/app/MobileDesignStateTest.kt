@@ -44,6 +44,18 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun toggleAllowServerClipboardWrite_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onAllowServerClipboardWriteChange = { seen += it })
+        assertEquals(false, s.allowServerClipboardWrite) // off by default (like xterm/kitty)
+        s.toggleAllowServerClipboardWrite()
+        assertEquals(true, s.allowServerClipboardWrite)
+        s.toggleAllowServerClipboardWrite()
+        assertEquals(false, s.allowServerClipboardWrite)
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
     fun chooseTerminalFont_updates_and_reports_once_skipping_repeat() {
         val seen = mutableListOf<TerminalFont>()
         val s = MobileDesignState(onTerminalFontChange = { seen += it })

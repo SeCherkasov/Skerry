@@ -87,6 +87,12 @@ class MobileDesignState(
     // [app.skerry.ui.terminal.LocalTerminalTheme]; not yet persisted on mobile (in-memory only).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Whether the server may write the system clipboard via OSC 52 (More -> Appearance -> Terminal).
+    // Off by default (like xterm/kitty): an untrusted host must not silently overwrite the clipboard
+    // until the user opts in. Snapshotted into new sessions via [app.skerry.ui.terminal.TerminalSessionPrefs]
+    // and pushed live into open ones. Persisted on Android; no-op default for previews/tests.
+    initialAllowServerClipboardWrite: Boolean = false,
+    private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
     // UI language (More -> Appearance -> Language). Initial value is read from persistence at
     // startup, the callback writes it back — the choice survives restart. Defaults (System, no-op)
     // auto-detect from the OS locale for previews/tests.
@@ -216,6 +222,12 @@ class MobileDesignState(
     /** Terminal theme (More -> Appearance -> cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
+    /**
+     * Whether a server may write the system clipboard via OSC 52 (More -> Appearance -> Terminal).
+     * Off by default; snapshotted into new sessions and pushed live into open ones.
+     */
+    var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
+
     /** UI language (More -> Appearance -> Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
@@ -241,6 +253,12 @@ class MobileDesignState(
         if (theme == terminalTheme) return
         terminalTheme = theme
         onTerminalThemeChange(theme)
+    }
+
+    /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */
+    fun toggleAllowServerClipboardWrite() {
+        allowServerClipboardWrite = !allowServerClipboardWrite
+        onAllowServerClipboardWriteChange(allowServerClipboardWrite)
     }
 
     /**

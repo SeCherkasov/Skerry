@@ -48,6 +48,8 @@ import app.skerry.ui.generated.resources.appearance_letter_spacing
 import app.skerry.ui.generated.resources.appearance_line_height
 import app.skerry.ui.generated.resources.appearance_section_interface
 import app.skerry.ui.generated.resources.appearance_section_terminal
+import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
+import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.more_about
 import app.skerry.ui.generated.resources.more_ai_privacy
@@ -477,6 +479,20 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                     suffix = "px",
                     fieldWidth = 52.dp,
                 )
+            }
+            // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host
+            // from silently overwriting the system clipboard. Applies to new and already-open sessions.
+            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Txt(stringResource(Res.string.settings_terminal_clipboard_write), color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.settings_terminal_clipboard_write_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                Toggle(on = state.allowServerClipboardWrite, onToggle = state::toggleAllowServerClipboardWrite)
             }
             Txt(stringResource(Res.string.appearance_section_interface), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
             FontSettingRow(stringResource(Res.string.appearance_language)) {

@@ -154,11 +154,13 @@ class TerminalEmulator(
     clipboardWriteEnabled: Boolean = false,
 ) {
     /**
-     * OSC 52 write gate: when off (default), a server's clipboard writes are dropped. Not a val — a
-     * live settings change flips it on an already-open session (see [TerminalScreenState]). Reading
-     * the clipboard is never allowed regardless of this flag.
+     * OSC 52 write gate: when off (default), a server's clipboard writes are dropped. Flipped by a
+     * live settings change via [applyClipboardWrite] (see [TerminalScreenState]); [private set] keeps
+     * this server-facing gate out of reach of external writers. Reading the clipboard is never
+     * allowed regardless of this flag.
      */
     var clipboardWriteEnabled: Boolean = clipboardWriteEnabled
+        private set
     var cols: Int = cols.coerceAtLeast(1)
         private set
     var rows: Int = rows.coerceAtLeast(1)
@@ -266,6 +268,15 @@ class TerminalEmulator(
     fun applyMaxScrollback(lines: Int) {
         maxScrollback = lines.coerceAtLeast(0)
         scrollback.trimTo(maxScrollback)
+    }
+
+    /**
+     * Toggles the OSC 52 clipboard-write gate on the fly (the setting changed on an already-open
+     * session). Off drops subsequent server clipboard writes, on lets them through. Call from the
+     * emulator's owner coroutine.
+     */
+    fun applyClipboardWrite(enabled: Boolean) {
+        clipboardWriteEnabled = enabled
     }
 
     var applicationCursorKeys: Boolean = false
