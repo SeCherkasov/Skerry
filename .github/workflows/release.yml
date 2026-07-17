@@ -425,11 +425,11 @@ jobs:
           upload "$(ls dist/Skerry-portable-x64.zip)"         Skerry-portable-x64.zip
           upload "$(ls dist/Skerry-*-arm64.dmg)"              Skerry-macos-arm64.dmg
           upload "$(ls dist/Skerry-*-x64.dmg)"                Skerry-macos-x64.dmg
-          upload "$(ls dist/*-amd64.deb)"                     Skerry-linux-amd64.deb
-          upload "$(ls dist/*-x86_64.rpm)"                    Skerry-linux-x86_64.rpm
+          upload "$(ls dist/*_amd64.deb)"                     Skerry-linux-amd64.deb
+          upload "$(ls dist/*.x86_64.rpm)"                    Skerry-linux-x86_64.rpm
           upload "$(ls dist/*-x86_64.AppImage)"               Skerry-linux-x86_64.AppImage
-          upload "$(ls dist/*-arm64.deb)"                     Skerry-linux-arm64.deb
-          upload "$(ls dist/*-aarch64.rpm)"                   Skerry-linux-aarch64.rpm
+          upload "$(ls dist/*_arm64.deb)"                     Skerry-linux-arm64.deb
+          upload "$(ls dist/*.aarch64.rpm)"                   Skerry-linux-aarch64.rpm
           upload "$(ls dist/*-aarch64.AppImage)"              Skerry-linux-aarch64.AppImage
           upload "$(ls dist/Skerry-*.flatpak)"                Skerry-linux.flatpak
           upload dist/SHA256SUMS.txt                          SHA256SUMS.txt
