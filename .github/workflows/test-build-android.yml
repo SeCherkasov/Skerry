@@ -75,5 +75,6 @@ jobs:
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           aws s3 cp dist/Skerry-test.apk \
             "s3://${R2_BUCKET_NAME}/Skerry/test/${{ inputs.r2_path }}/Skerry-android.apk" \
-            --endpoint-url "$ENDPOINT" --region auto --no-progress
+            --endpoint-url "$ENDPOINT" --region auto --no-progress \
+            --cache-control "max-age=0, no-cache"
           echo "✅ https://dl.onepve.com/Skerry/test/${{ inputs.r2_path }}/Skerry-android.apk"
