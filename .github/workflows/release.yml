@@ -419,7 +419,8 @@ jobs:
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           upload() { # $1 local file, $2 r2 key
             aws s3 cp "$1" "s3://${R2_BUCKET_NAME}/Skerry/latest/$2" \
-              --endpoint-url "$ENDPOINT" --region auto --no-progress
+              --endpoint-url "$ENDPOINT" --region auto --no-progress \
+              --cache-control "max-age=0, no-cache"
           }
           upload "$(ls dist/Skerry-*.apk)"                    Skerry-android.apk
           upload "$(ls dist/Skerry-portable-x64.zip)"         Skerry-portable-x64.zip
