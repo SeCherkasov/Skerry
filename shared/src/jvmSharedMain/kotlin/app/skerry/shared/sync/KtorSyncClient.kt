@@ -3,6 +3,7 @@ package app.skerry.shared.sync
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
 import app.skerry.sync.wire.DevicesResponse
+import app.skerry.sync.wire.ErrorResponse
 import app.skerry.sync.wire.KeysResponse
 import app.skerry.sync.wire.PairingClaimRequest
 import app.skerry.sync.wire.PairingClaimResponse
@@ -88,6 +89,7 @@ class KtorSyncClient(
         authKey: ByteArray,
         wrappedDataKey: ByteArray,
         device: DeviceInfo,
+        inviteCode: String?,
     ): SyncSession {
         // The client itself computes the salt and verifier from authKey — the server never sees the password.
         val salt = BigInteger(256, random)
@@ -103,6 +105,7 @@ class KtorSyncClient(
                     deviceId = device.id,
                     deviceName = device.name,
                     platform = device.platform,
+                    inviteCode = inviteCode,
                 ),
             )
         }.bodyChecked()
@@ -394,14 +397,22 @@ class KtorSyncClient(
     }
 
     private suspend fun HttpResponse.toException(): SyncException {
+        // Parse the server's ErrorResponse body for a human-readable message; fall back to the
+        // status code when the body isn't valid JSON (e.g. proxy returned an HTML error page).
+        val msg = try {
+            body<ErrorResponse>().error
+        } catch (_: Exception) {
+            "server responded ${status.value}"
+        }
         val kind = when (status) {
             HttpStatusCode.Unauthorized -> SyncException.Kind.UNAUTHORIZED
-            HttpStatusCode.NotFound -> SyncException.Kind.NOT_FOUND
-            HttpStatusCode.Conflict -> SyncException.Kind.CONFLICT
-            HttpStatusCode.Gone -> SyncException.Kind.GONE
-            else -> SyncException.Kind.PROTOCOL
+            HttpStatusCode.NotFound    -> SyncException.Kind.NOT_FOUND
+            HttpStatusCode.Conflict    -> SyncException.Kind.CONFLICT
+            HttpStatusCode.Gone        -> SyncException.Kind.GONE
+            HttpStatusCode.Forbidden   -> SyncException.Kind.FORBIDDEN
+            else                       -> SyncException.Kind.PROTOCOL
         }
-        return SyncException(kind, "server responded ${status.value}")
+        return SyncException(kind, msg)
     }
 
     private fun HttpStatusCode.isSuccess() = value in 200..299

@@ -44,6 +44,7 @@ fun syncFailureText(failed: SyncStatus.Failed): String {
             SyncFailureReason.SaveSettingsFailed -> Res.string.sync_fail_save_settings
             SyncFailureReason.SyncFailed -> Res.string.sync_fail_sync
             SyncFailureReason.RevokeFailed -> Res.string.sync_fail_revoke
+            SyncFailureReason.Forbidden -> Res.string.sync_fail_forbidden
         },
     )
     return failed.detail?.takeIf { it.isNotBlank() }?.let { "$base: $it" } ?: base
