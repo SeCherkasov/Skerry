@@ -193,7 +193,12 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // is also exactly what an app that has not been unlocked yet should offer.
     var sshAgentController: app.skerry.ui.agent.SshAgentController? = null
     val agentKeys = SshjAgentKeys({ sshAgentController?.keyMaterial().orEmpty() })
-    val agentService = SshAgentService(agentKeys) { usage -> sshAgentController?.record(usage) }
+    // No controller yet (or one that says no) means no signature: at that point the agent holds no
+    // keys either, so refusing is the honest answer.
+    val agentService = SshAgentService(
+        agentKeys,
+        confirm = { prompt -> sshAgentController?.confirmSignature(prompt) == true },
+    ) { usage -> sshAgentController?.record(usage) }
     // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the TOFU
     // verifier/known-hosts; Telnet/Serial are stateless (created internally with defaults). Only
     // this transport gets the agent: probe/tunnel connections below must never expose keys.
@@ -298,6 +303,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         persistEnabled = { prefs.set("ssh_agent", it) },
         initialSocketEnabled = prefs.bool("ssh_agent_socket", false),
         persistSocketEnabled = { prefs.set("ssh_agent_socket", it) },
+        initialConfirmSignatures = prefs.bool("ssh_agent_confirm", false),
+        persistConfirmSignatures = { prefs.set("ssh_agent_confirm", it) },
     )
     // Saved snippets: the command library is SNIPPET records in the vault (commands may contain
     // inline credentials, so they share encryption and E2E sync). Run targets the active terminal.

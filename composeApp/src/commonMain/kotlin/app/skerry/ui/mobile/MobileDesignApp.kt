@@ -34,6 +34,7 @@ import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.JumpChainProblem
 import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.agent.AgentSignPromptDialog
 import app.skerry.ui.connection.JumpErrorDialog
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.resolveJumpChain
@@ -515,6 +516,9 @@ private fun MobileChrome(
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
+            // A forwarded session asking to sign, when the user chose to confirm every signature.
+            // Root-level for the same reason as on desktop: nothing on screen raised it.
+            AgentSignPromptDialog(LocalSshAgent.current)
         }
     }
 }

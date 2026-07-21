@@ -79,6 +79,7 @@ import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.JumpChainProblem
 import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.agent.AgentSignPromptDialog
 import app.skerry.ui.connection.JumpErrorDialog
 import app.skerry.ui.connection.jumpRouteLabel
 import app.skerry.ui.connection.resolveJumpChain
@@ -742,6 +743,9 @@ private fun DesktopChrome(
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
+            // A forwarded session (or a local program) asking to sign, when the user chose to
+            // confirm every signature. It belongs at the root: nothing on screen raised it.
+            AgentSignPromptDialog(LocalSshAgent.current)
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
             // secret itself stays in the vault (reusable, managed from the Vault tab).
             val hosts = LocalHosts.current

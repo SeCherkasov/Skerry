@@ -231,14 +231,14 @@ class MainActivity : FragmentActivity() {
      * OSC 52 server clipboard-write gate (More → Appearance → Terminal): "true"/"false" in
      * `terminal_clipboard_write`. Missing/unreadable → false (off by default). Best-effort, off the UI thread.
      */
-    /** Master switch of the built-in SSH agent (per device, like the desktop pref). */
-    private fun readAgentEnabled(dir: File): Boolean = runCatching {
-        File(dir, "ssh_agent").readText().trim().toBoolean()
+    /** Per-device switches of the built-in SSH agent, one file each (like the desktop prefs). */
+    private fun readAgentFlag(dir: File, name: String): Boolean = runCatching {
+        File(dir, name).readText().trim().toBoolean()
     }.getOrDefault(false)
 
-    private fun writeAgentEnabled(dir: File, enabled: Boolean) {
+    private fun writeAgentFlag(dir: File, name: String, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { File(dir, "ssh_agent").writeText(enabled.toString()) }
+            runCatching { File(dir, name).writeText(enabled.toString()) }
         }
     }
 
@@ -349,7 +349,12 @@ class MainActivity : FragmentActivity() {
         // controller assembled a few lines down, hence the var (same pattern as teamsForSync).
         var sshAgentController: app.skerry.ui.agent.SshAgentController? = null
         val agentKeys = SshjAgentKeys({ sshAgentController?.keyMaterial().orEmpty() })
-        val agentService = SshAgentService(agentKeys) { usage -> sshAgentController?.record(usage) }
+        // No controller yet (or one that says no) means no signature: at that point the agent holds
+        // no keys either, so refusing is the honest answer.
+        val agentService = SshAgentService(
+            agentKeys,
+            confirm = { prompt -> sshAgentController?.confirmSignature(prompt) == true },
+        ) { usage -> sshAgentController?.record(usage) }
         val transport = RoutingTransport(
             ssh = SshjTransport(
                 TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
@@ -364,8 +369,10 @@ class MainActivity : FragmentActivity() {
             socket = null,
             dropParsedKeys = agentKeys::clear,
             activityLog = SshAgentActivityLog(clock = { Instant.now().toString() }),
-            initialEnabled = readAgentEnabled(dir),
-            persistEnabled = { writeAgentEnabled(dir, it) },
+            initialEnabled = readAgentFlag(dir, "ssh_agent"),
+            persistEnabled = { writeAgentFlag(dir, "ssh_agent", it) },
+            initialConfirmSignatures = readAgentFlag(dir, "ssh_agent_confirm"),
+            persistConfirmSignatures = { writeAgentFlag(dir, "ssh_agent_confirm", it) },
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         // Host profiles are HOST records in the vault; tree order lives in a layout record. The vault
@@ -507,7 +514,8 @@ class MainActivity : FragmentActivity() {
                 writeClipboardWrite(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
-                writeAgentEnabled(dir, false)
+                writeAgentFlag(dir, "ssh_agent", false)
+                writeAgentFlag(dir, "ssh_agent_confirm", false)
             }
             hosts.reload()
             snippets.reload()

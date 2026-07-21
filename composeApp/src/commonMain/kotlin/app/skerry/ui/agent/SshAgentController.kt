@@ -7,10 +7,22 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.agent.SshAgentActivity
 import app.skerry.shared.agent.SshAgentActivityLog
 import app.skerry.shared.agent.SshAgentKeyMaterial
+import app.skerry.shared.agent.SshAgentSignPrompt
 import app.skerry.shared.agent.SshAgentUsage
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.identity.CredentialManagerController
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Settings → SSH agent: which vault keys the built-in agent offers, whether it is reachable from
@@ -38,6 +50,13 @@ class SshAgentController(
     private val persistEnabled: (Boolean) -> Unit = {},
     initialSocketEnabled: Boolean = false,
     private val persistSocketEnabled: (Boolean) -> Unit = {},
+    initialConfirmSignatures: Boolean = false,
+    private val persistConfirmSignatures: (Boolean) -> Unit = {},
+    /**
+     * Where the prompt state is published. Requests arrive on the agent's IO threads, so the
+     * snapshot writes are moved onto the UI thread, as every other state this class owns is.
+     */
+    private val uiContext: CoroutineContext = Dispatchers.Main.immediate,
 ) {
     /** Master switch. Off means the agent answers with an empty key list, wherever it is asked. */
     var enabled: Boolean by mutableStateOf(initialEnabled)
@@ -53,6 +72,14 @@ class SshAgentController(
 
     /** The socket was asked for but could not be bound — shown instead of a silent no-op. */
     var socketFailed: Boolean by mutableStateOf(false)
+        private set
+
+    /** Ask the user before every signature (`ssh-agent -c`). */
+    var confirmSignatures: Boolean by mutableStateOf(initialConfirmSignatures)
+        private set
+
+    /** The signature currently waiting for an answer, rendered as a dialog over everything. */
+    var pendingSignature: SshAgentSignPrompt? by mutableStateOf(null)
         private set
 
     /** Recent agent activity, newest first. In memory only — see [SshAgentActivityLog]. */
@@ -85,6 +112,44 @@ class SshAgentController(
         // The keyring caches parsed keys by credential id; a key just removed must stop being
         // offered immediately.
         dropParsedKeys()
+    }
+
+    fun confirmEachSignature(enabled: Boolean) {
+        if (confirmSignatures == enabled) return
+        confirmSignatures = enabled
+        persistConfirmSignatures(enabled)
+        // Switching confirmation off must not leave a request hanging on a dialog nobody will see.
+        if (!enabled) answerSignature(allow = false)
+    }
+
+    /**
+     * The gate the agent asks before signing. Called from the agent's IO threads and suspends there
+     * until the user answers, the prompt times out, or the vault locks — all of which the caller
+     * turns into a protocol refusal. One prompt at a time: a second request queues behind the
+     * first, so an answer is never ambiguous about which signature it allows.
+     */
+    suspend fun confirmSignature(prompt: SshAgentSignPrompt): Boolean {
+        if (!confirmSignatures) return true
+        return promptLock.withLock {
+            val answer = CompletableDeferred<Boolean>()
+            withContext(uiContext) {
+                pending = answer
+                pendingSignature = prompt
+            }
+            try {
+                withTimeoutOrNull(PROMPT_TIMEOUT_MS) { answer.await() } ?: false
+            } finally {
+                withContext(NonCancellable + uiContext) {
+                    pending = null
+                    pendingSignature = null
+                }
+            }
+        }
+    }
+
+    /** The user's answer to [pendingSignature]; a no-op when nothing is waiting. */
+    fun answerSignature(allow: Boolean) {
+        pending?.complete(allow)
     }
 
     fun exposeSocket(enabled: Boolean) {
@@ -120,15 +185,22 @@ class SshAgentController(
         }
     }
 
-    /** Record one thing the agent did (called from the agent's own threads). */
+    /**
+     * Record one thing the agent did. Called from the agent's IO threads, so the snapshot it
+     * produces is published on the UI thread — the same rule the signature prompt follows, and the
+     * log itself keeps the ordering (the snapshot is taken under its lock).
+     */
     fun record(usage: SshAgentUsage) {
-        activityLog.record(usage) { activity = it }
+        activityLog.record(usage) { snapshot -> scope.launch { activity = snapshot } }
     }
+
 
     /** Vault locked: forget parsed keys and stop serving until it is opened again. */
     fun onVaultLocked() {
         dropParsedKeys()
         stopSocket()
+        // The prompt would otherwise sit behind the lock screen, and the key it guards is gone.
+        answerSignature(allow = false)
     }
 
     /** Vault opened: bring the socket back if the user had it on. */
@@ -148,6 +220,18 @@ class SshAgentController(
         socket?.stop()
         socketPath = null
         socketFailed = false
+    }
+
+    private val promptLock = Mutex()
+    private var pending: CompletableDeferred<Boolean>? = null
+
+    // Publishes state produced on the agent's threads onto the UI one. Lives as long as the
+    // controller does — one per app, not per session.
+    private val scope = CoroutineScope(SupervisorJob() + uiContext)
+
+    companion object {
+        /** How long an unanswered signature prompt waits before it refuses on its own. */
+        const val PROMPT_TIMEOUT_MS = 120_000L
     }
 }
 

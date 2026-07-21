@@ -27,7 +27,8 @@ import org.jetbrains.compose.resources.stringResource
  * Confirmation dialog for a destructive action (disconnect session, close split panel, delete
  * tunnel): scrim + card, title + message + Cancel/[confirmLabel]. Same visual language as
  * [DesktopDeleteHostDialog]/[DesktopPasswordDialog]; confirm button defaults to [D.sunset].
- * [onDismiss] fires on Cancel or Esc (not on a click outside the card).
+ * [onDismiss] fires on Cancel or Esc (not on a click outside the card). [dismissLabel] renames that
+ * button where "Cancel" would understate it (refusing a signature is an answer, not a way out).
  */
 @Composable
 fun ConfirmActionDialog(
@@ -37,6 +38,7 @@ fun ConfirmActionDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     confirmColor: Color = D.sunset,
+    dismissLabel: String? = null,
 ) {
     ModalScrim(onDismiss = onDismiss) {
         Column(
@@ -58,7 +60,7 @@ fun ConfirmActionDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
+                    Txt(dismissLabel ?: stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
                 }
                 PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Color(0xFF1A0B07))
             }

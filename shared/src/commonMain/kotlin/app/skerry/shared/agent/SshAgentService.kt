@@ -15,6 +15,14 @@ import kotlinx.coroutines.CancellationException
  */
 class SshAgentService(
     private val keys: SshAgentKeys,
+    /**
+     * Asked before every signature, the equivalent of `ssh-agent -c`. Suspends for as long as the
+     * user takes to answer — the requesting channel waits, which is what the protocol expects of a
+     * slow agent. `false` refuses the request. The default answers yes, i.e. behaves like a plain
+     * `ssh-agent`; the policy (and the UI) lives in the app.
+     */
+    private val confirm: suspend (SshAgentSignPrompt) -> Boolean = { true },
+    // Kept last so `SshAgentService(keys) { ... }` still reads as "report uses here".
     private val onUse: (SshAgentUsage) -> Unit = {},
 ) {
 
@@ -57,6 +65,30 @@ class SshAgentService(
     }
 
     private suspend fun sign(request: SshAgentRequest.Sign, origin: SshAgentOrigin): ByteArray {
+        // Resolve the key before asking anything: a blob we do not hold is refused outright, so a
+        // remote cannot raise confirmation prompts by naming keys at random. The listing is served
+        // from the keyring's cache, so this costs nothing per request.
+        val identity = try {
+            keys.identities().firstOrNull { it.keyBlob.contentEquals(request.keyBlob) }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            null
+        } ?: return refuse(origin)
+
+        // A broken confirmation channel (no UI to ask, prompt path failed) is not an answer, and
+        // "no answer" refuses: it must never fall through to a signature, nor throw at the peer's
+        // serving coroutine.
+        val allowed = try {
+            confirm(SshAgentSignPrompt(origin, identity.comment))
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            return refuse(origin)
+        }
+        if (!allowed) {
+            report(origin, SshAgentAction.Declined, identity.comment)
+            return SshAgentCodec.failure()
+        }
+
         // The keyring is the only place that decides whether a key may be used; an unknown blob
         // (or a key the user has not put in the agent) comes back null and is refused here.
         val signature = try {
@@ -120,7 +152,13 @@ enum class SshAgentAction {
 
     /** The server declined agent forwarding for a session that asked for it. */
     ForwardingDenied,
+
+    /** The user was asked to confirm a signature and said no (or let the prompt time out). */
+    Declined,
 }
+
+/** One signature waiting for the user's answer — who is asking, and with which key. */
+class SshAgentSignPrompt(val origin: SshAgentOrigin, val keyComment: String)
 
 /** One entry for the activity list. */
 class SshAgentUsage(

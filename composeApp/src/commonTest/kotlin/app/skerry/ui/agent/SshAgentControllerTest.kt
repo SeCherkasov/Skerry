@@ -3,6 +3,7 @@ package app.skerry.ui.agent
 import app.skerry.shared.agent.SshAgentAction
 import app.skerry.shared.agent.SshAgentActivityLog
 import app.skerry.shared.agent.SshAgentOrigin
+import app.skerry.shared.agent.SshAgentSignPrompt
 import app.skerry.shared.agent.SshAgentUsage
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
@@ -15,6 +16,13 @@ import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
 import app.skerry.ui.identity.CredentialManagerController
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,7 +51,12 @@ class SshAgentControllerTest {
     private val credentials = CredentialManagerController(CredentialStore(vault)) { "generated" }
     private var parsedKeysDropped = 0
 
-    private fun controller(socket: SshAgentSocket? = null, enabled: Boolean = true) =
+    private fun controller(
+        socket: SshAgentSocket? = null,
+        enabled: Boolean = true,
+        confirmSignatures: Boolean = false,
+        uiContext: CoroutineContext = EmptyCoroutineContext,
+    ) =
         SshAgentController(
             credentials = credentials,
             isVaultUnlocked = { vault.isUnlocked },
@@ -52,6 +65,8 @@ class SshAgentControllerTest {
             activityLog = SshAgentActivityLog(clock = { "2026-07-21T10:00:00Z" }),
             initialEnabled = enabled,
             initialSocketEnabled = false,
+            initialConfirmSignatures = confirmSignatures,
+            uiContext = uiContext,
         )
 
     private fun addKey(id: String, label: String, inAgent: Boolean, secret: CredentialSecret = CredentialSecret.PrivateKey("pem-$id")) {
@@ -165,8 +180,8 @@ class SshAgentControllerTest {
     }
 
     @Test
-    fun `records agent use newest first and keeps the list bounded`() {
-        val controller = controller()
+    fun `records agent use newest first and keeps the list bounded`() = runTest {
+        val controller = controller(uiContext = UnconfinedTestDispatcher(testScheduler))
         repeat(MAX + 5) {
             controller.record(SshAgentUsage(SshAgentOrigin.Session("host-$it"), SshAgentAction.Signed, "work"))
         }
@@ -175,6 +190,89 @@ class SshAgentControllerTest {
         assertEquals("host-${MAX + 4}", (controller.activity.first().origin as SshAgentOrigin.Session).address)
         assertEquals("2026-07-21T10:00:00Z", controller.activity.first().at)
     }
+
+    @Test
+    fun `without per-signature confirmation the agent signs straight away`() = runTest {
+        val controller = controller(confirmSignatures = false)
+
+        assertTrue(controller.confirmSignature(prompt()))
+        assertNull(controller.pendingSignature)
+    }
+
+    @Test
+    fun `a signature waits for the user and goes through once allowed`() = runTest {
+        val controller = controller(confirmSignatures = true)
+
+        val answer = async { controller.confirmSignature(prompt()) }
+        runCurrent()
+        assertEquals("work", controller.pendingSignature?.keyComment)
+
+        controller.answerSignature(allow = true)
+
+        assertTrue(answer.await())
+        assertNull(controller.pendingSignature, "the prompt outlived the answer")
+    }
+
+    @Test
+    fun `declining a signature refuses it`() = runTest {
+        val controller = controller(confirmSignatures = true)
+
+        val answer = async { controller.confirmSignature(prompt()) }
+        runCurrent()
+        controller.answerSignature(allow = false)
+
+        assertFalse(answer.await())
+        assertNull(controller.pendingSignature)
+    }
+
+    @Test
+    fun `an unanswered prompt times out as a refusal`() = runTest {
+        // The requesting channel must not hang forever on a dialog nobody is looking at.
+        val controller = controller(confirmSignatures = true)
+
+        val answer = async { controller.confirmSignature(prompt()) }
+        runCurrent()
+        advanceTimeBy(SshAgentController.PROMPT_TIMEOUT_MS + 1)
+
+        assertFalse(answer.await())
+        assertNull(controller.pendingSignature)
+    }
+
+    @Test
+    fun `locking the vault refuses whatever is waiting for an answer`() = runTest {
+        val controller = controller(confirmSignatures = true)
+
+        val answer = async { controller.confirmSignature(prompt()) }
+        runCurrent()
+        controller.onVaultLocked()
+
+        assertFalse(answer.await())
+        assertNull(controller.pendingSignature)
+    }
+
+    @Test
+    fun `a second request waits its turn instead of replacing the prompt`() = runTest {
+        // Two forwarded channels can ask at once; answering must not be ambiguous about which
+        // request the click belongs to.
+        val controller = controller(confirmSignatures = true)
+
+        val first = async { controller.confirmSignature(prompt("work")) }
+        runCurrent()
+        val second = async { controller.confirmSignature(prompt("home")) }
+        runCurrent()
+        assertEquals("work", controller.pendingSignature?.keyComment)
+
+        controller.answerSignature(allow = true)
+        runCurrent()
+        assertTrue(first.await())
+        assertEquals("home", controller.pendingSignature?.keyComment)
+
+        controller.answerSignature(allow = false)
+        assertFalse(second.await())
+    }
+
+    private fun prompt(keyComment: String = "work") =
+        SshAgentSignPrompt(SshAgentOrigin.Session("bastion.example"), keyComment)
 
     private companion object {
         const val MAX = SshAgentActivityLog.DEFAULT_MAX

@@ -4,6 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private val ORIGIN = SshAgentOrigin.Session("bastion.example")
@@ -100,6 +102,83 @@ class SshAgentServiceTest {
     fun `refuses an oversized request without parsing it`() = runTest {
         val response = SshAgentService(FakeKeys()).handle(ByteArray(SshAgentCodec.MAX_MESSAGE_BYTES + 1), ORIGIN)
         assertContentEquals(SshAgentCodec.failure(), response)
+    }
+
+    @Test
+    fun `asks the user before signing and refuses when they decline`() = runTest {
+        val keys = FakeKeys(
+            identities = listOf(SshAgentIdentity(byteArrayOf(1), "work")),
+            signature = SshAgentSignature(byteArrayOf(42), "work"),
+        )
+        val asked = mutableListOf<SshAgentSignPrompt>()
+        val uses = mutableListOf<SshAgentUsage>()
+        val service = SshAgentService(keys, onUse = { uses += it }, confirm = { asked += it; false })
+
+        val response = service.handle(signRequest(byteArrayOf(1), byteArrayOf(7)), ORIGIN)
+
+        assertContentEquals(SshAgentCodec.failure(), response)
+        assertEquals(listOf(SshAgentAction.Declined), uses.map { it.action })
+        assertEquals(ORIGIN, asked.single().origin)
+        assertEquals("work", asked.single().keyComment)
+        assertNull(keys.signedData, "the key was used even though the user declined")
+    }
+
+    @Test
+    fun `signs once the user allows it`() = runTest {
+        val keys = FakeKeys(
+            identities = listOf(SshAgentIdentity(byteArrayOf(1), "work")),
+            signature = SshAgentSignature(byteArrayOf(42), "work"),
+        )
+        val service = SshAgentService(keys, confirm = { true })
+
+        assertContentEquals(
+            SshAgentCodec.signResponse(byteArrayOf(42)),
+            service.handle(signRequest(byteArrayOf(1), byteArrayOf(7)), ORIGIN),
+        )
+    }
+
+    @Test
+    fun `a key the agent does not hold is refused without asking the user`() = runTest {
+        // Otherwise a remote could raise a confirmation dialog at will by naming keys at random.
+        val keys = FakeKeys(identities = listOf(SshAgentIdentity(byteArrayOf(1), "work")))
+        var asked = false
+        val uses = mutableListOf<SshAgentUsage>()
+        val service = SshAgentService(keys, onUse = { uses += it }, confirm = { asked = true; true })
+
+        val response = service.handle(signRequest(byteArrayOf(2), byteArrayOf(7)), ORIGIN)
+
+        assertContentEquals(SshAgentCodec.failure(), response)
+        assertFalse(asked, "an unknown key blob raised a confirmation prompt")
+        assertEquals(listOf(SshAgentAction.Refused), uses.map { it.action })
+    }
+
+    @Test
+    fun `a confirmation channel that breaks refuses instead of taking the connection down`() = runTest {
+        // The prompt lives in the UI; if that path fails there is no answer, and "no answer" is a
+        // refusal — not an exception thrown at the peer's serving coroutine.
+        val keys = FakeKeys(
+            identities = listOf(SshAgentIdentity(byteArrayOf(1), "work")),
+            signature = SshAgentSignature(byteArrayOf(42), "work"),
+        )
+        val uses = mutableListOf<SshAgentUsage>()
+        val service = SshAgentService(keys, onUse = { uses += it }, confirm = { error("no UI here") })
+
+        val response = service.handle(signRequest(byteArrayOf(1), byteArrayOf(7)), ORIGIN)
+
+        assertContentEquals(SshAgentCodec.failure(), response)
+        assertEquals(listOf(SshAgentAction.Refused), uses.map { it.action })
+        assertNull(keys.signedData, "the key was used despite the confirmation failing")
+    }
+
+    @Test
+    fun `listing keys never asks for confirmation`() = runTest {
+        // Only signing uses a key; prompting on enumeration would fire on every single login.
+        var asked = false
+        val keys = FakeKeys(identities = listOf(SshAgentIdentity(byteArrayOf(1), "work")))
+
+        SshAgentService(keys, confirm = { asked = true; true }).handle(byteArrayOf(11), ORIGIN)
+
+        assertFalse(asked)
     }
 
     @Test

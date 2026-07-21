@@ -29,4 +29,12 @@
     <string name="agent_subtitle_mobile">Hold keys in the vault and let a session sign with them, without ever handing over the key itself.</string>
     <string name="agent_socket_needs_agent">Turn the agent on above to serve local programs.</string>
     <string name="agent_no_keys">No keys in the agent — add one below</string>
+    <string name="agent_confirm">Confirm every signature</string>
+    <string name="agent_confirm_desc">Ask before each use of a key, like ssh-agent -c. Unanswered requests are refused.</string>
+    <string name="agent_activity_declined">Declined by you</string>
+    <string name="agent_prompt_title">Allow this signature?</string>
+    <string name="agent_prompt_body">%1$s wants to sign with the key “%2$s”.</string>
+    <string name="agent_prompt_hint">No answer within two minutes refuses the request.</string>
+    <string name="agent_prompt_allow">Allow once</string>
+    <string name="agent_prompt_deny">Refuse</string>
 </resources>

@@ -29,4 +29,12 @@
     <string name="agent_subtitle_mobile">Ключи остаются в хранилище, а сессия получает подпись, но не сам ключ.</string>
     <string name="agent_socket_needs_agent">Включите агента выше, чтобы обслуживать локальные программы.</string>
     <string name="agent_no_keys">В агенте нет ключей — добавьте ниже</string>
+    <string name="agent_confirm">Подтверждать каждую подпись</string>
+    <string name="agent_confirm_desc">Спрашивать перед каждым использованием ключа, как ssh-agent -c. Запросы без ответа отклоняются.</string>
+    <string name="agent_activity_declined">Вы отклонили</string>
+    <string name="agent_prompt_title">Разрешить подпись?</string>
+    <string name="agent_prompt_body">%1$s просит подписать ключом «%2$s».</string>
+    <string name="agent_prompt_hint">Без ответа в течение двух минут запрос будет отклонён.</string>
+    <string name="agent_prompt_allow">Разрешить один раз</string>
+    <string name="agent_prompt_deny">Отклонить</string>
 </resources>

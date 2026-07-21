@@ -14,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.agent.SshAgentAction
@@ -29,6 +28,8 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.agent_activity
 import app.skerry.ui.generated.resources.agent_activity_none
+import app.skerry.ui.generated.resources.agent_confirm
+import app.skerry.ui.generated.resources.agent_confirm_desc
 import app.skerry.ui.generated.resources.agent_enable
 import app.skerry.ui.generated.resources.agent_enable_desc
 import app.skerry.ui.generated.resources.agent_key_certificate
@@ -59,13 +60,18 @@ fun MobileAgentScreen(state: MobileDesignState) {
                 modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
             )
 
-            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Txt(stringResource(Res.string.agent_enable), color = D.text, size = 14.5.sp)
-                    Txt(stringResource(Res.string.agent_enable_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
-                }
-                Toggle(controller?.enabled == true, { controller?.enable(controller.enabled != true) })
-            }
+            MobileAgentToggleRow(
+                stringResource(Res.string.agent_enable),
+                stringResource(Res.string.agent_enable_desc),
+                on = controller?.enabled == true,
+                onToggle = { controller?.enable(controller.enabled != true) },
+            )
+            MobileAgentToggleRow(
+                stringResource(Res.string.agent_confirm),
+                stringResource(Res.string.agent_confirm_desc),
+                on = controller?.confirmSignatures == true,
+                onToggle = { controller?.confirmEachSignature(controller.confirmSignatures != true) },
+            )
 
             MobileSectionLabel(stringResource(Res.string.agent_keys))
             val keys = controller?.agentKeys.orEmpty()
@@ -92,6 +98,18 @@ fun MobileAgentScreen(state: MobileDesignState) {
     }
 }
 
+/** One switch with its explanation, as the desktop section's [SettingToggleRow] does. */
+@Composable
+private fun MobileAgentToggleRow(title: String, description: String, on: Boolean, onToggle: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = D.text, size = 14.5.sp)
+            Txt(description, color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Toggle(on, onToggle)
+    }
+}
+
 @Composable
 private fun MobileAgentKeyRow(key: Credential, controller: SshAgentController?) {
     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -109,17 +127,4 @@ private fun MobileAgentKeyRow(key: Credential, controller: SshAgentController?) 
         }
         Toggle(key.agentEnabled, { controller?.setKeyInAgent(key.id, !key.agentEnabled) })
     }
-}
-
-/** Small caps group heading, matching the other mobile settings screens. */
-@Composable
-private fun MobileSectionLabel(text: String) {
-    Txt(
-        text,
-        color = D.faint,
-        size = 10.sp,
-        weight = FontWeight.SemiBold,
-        letterSpacing = 0.5.sp,
-        modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
-    )
 }

@@ -27,12 +27,15 @@ import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.agent_activity
+import app.skerry.ui.generated.resources.agent_activity_declined
 import app.skerry.ui.generated.resources.agent_activity_denied
 import app.skerry.ui.generated.resources.agent_activity_line
 import app.skerry.ui.generated.resources.agent_activity_listed
 import app.skerry.ui.generated.resources.agent_activity_none
 import app.skerry.ui.generated.resources.agent_activity_refused
 import app.skerry.ui.generated.resources.agent_activity_signed
+import app.skerry.ui.generated.resources.agent_confirm
+import app.skerry.ui.generated.resources.agent_confirm_desc
 import app.skerry.ui.generated.resources.agent_enable
 import app.skerry.ui.generated.resources.agent_enable_desc
 import app.skerry.ui.generated.resources.agent_key_certificate
@@ -73,6 +76,13 @@ internal fun AgentSection(controller: SshAgentController?) {
         stringResource(Res.string.agent_enable_desc),
         on = controller?.enabled == true,
         onToggle = { controller?.enable(controller.enabled != true) },
+    )
+
+    SettingToggleRow(
+        stringResource(Res.string.agent_confirm),
+        stringResource(Res.string.agent_confirm_desc),
+        on = controller?.confirmSignatures == true,
+        onToggle = { controller?.confirmEachSignature(controller.confirmSignatures != true) },
     )
 
     SectionLabel(stringResource(Res.string.agent_keys))
@@ -170,6 +180,7 @@ internal fun agentActivityLine(entry: SshAgentActivity): String {
             SshAgentAction.Signed -> Res.string.agent_activity_signed
             SshAgentAction.Refused -> Res.string.agent_activity_refused
             SshAgentAction.ForwardingDenied -> Res.string.agent_activity_denied
+            SshAgentAction.Declined -> Res.string.agent_activity_declined
         },
     )
     val origin = when (val where = entry.origin) {
