@@ -99,6 +99,26 @@ class CredentialManagerControllerTest {
         assertNull(controller.find("missing"))
         assertNull(controller.find(null))
     }
+
+    @Test
+    fun `editing a secret keeps it in the agent`() {
+        // The agent switch lives in Settings, not in the keychain form: re-saving a key there must
+        // neither drop it out of the agent nor sneak it in.
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+        val id = controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem"))
+        controller.setAgentEnabled(id, true)
+
+        controller.save(CredentialDraft(id = id, label = "Key renamed", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem2"))
+
+        assertEquals(true, controller.credentials.single().agentEnabled)
+    }
+
+    @Test
+    fun `a new secret is not in the agent`() {
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem"))
+        assertEquals(false, controller.credentials.single().agentEnabled)
+    }
 }
 
 /** In-memory [Vault] storing records (put/openPayload/records/remove, tombstone) for tests. */

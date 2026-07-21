@@ -202,6 +202,14 @@ val LocalTeams: ProvidableCompositionLocal<app.skerry.ui.teams.TeamsCoordinator?
 val LocalAi: ProvidableCompositionLocal<AiAssistantController?> = staticCompositionLocalOf { null }
 
 /**
+ * Built-in SSH agent (Settings → SSH agent): which vault keys it offers, the local agent socket on
+ * desktop, and its recent activity. `null` — mock path/preview or a platform build without an
+ * agent: the section renders a static layout. Supplied behind the vault gate (the keys it hands out
+ * are vault secrets).
+ */
+val LocalSshAgent: ProvidableCompositionLocal<app.skerry.ui.agent.SshAgentController?> = staticCompositionLocalOf { null }
+
+/**
  * Update-notice controller (GitHub Releases check + the "check for updates" toggle). `null` — mock
  * path/preview: the About section hides the toggle and no notice is shown. Supplied behind the
  * vault gate (the toggle is a synced SETTINGS record in the vault).

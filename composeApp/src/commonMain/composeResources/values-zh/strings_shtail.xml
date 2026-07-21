@@ -3,6 +3,7 @@
     <string name="shtail_nav_ai">AI</string>
     <string name="shtail_nav_sync">同步</string>
     <string name="shtail_nav_security">安全</string>
+    <string name="shtail_nav_agent">SSH 代理</string>
     <string name="shtail_nav_appearance">外观</string>
     <string name="shtail_nav_terminal">终端</string>
     <string name="shtail_nav_keyboard">键盘</string>

@@ -60,7 +60,7 @@ fun SessionView.asDesktopView(): DesktopView = when (this) {
 }
 
 /** Settings panel tabs. */
-enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, About }
+enum class SettingsTab { AI, Sync, Security, Agent, Appearance, Terminal, Keyboard, About }
 
 /**
  * Connection AI policy. Aliases the shared enum ([app.skerry.shared.host.Host.aiPolicy]) so the

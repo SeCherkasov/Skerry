@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.ui.agent.SshAgentController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.tunnel.TunnelManager
 
@@ -15,10 +16,15 @@ import app.skerry.ui.tunnel.TunnelManager
  * the tabs are still there after unlocking — but their saved credentials are cleared, because an
  * auto-reconnect after a lock would re-authenticate with a stale secret against a locked vault.
  *
+ * The SSH agent forgets every private key it had parsed and stops serving the local socket. This
+ * matters precisely because sessions survive: a server whose forwarded agent channel is still open
+ * would otherwise keep getting signatures from behind the lock screen.
+ *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
-fun tearDownForLock(tunnels: TunnelManager?, sessions: SessionsController?) {
+fun tearDownForLock(tunnels: TunnelManager?, sessions: SessionsController?, agent: SshAgentController? = null) {
     tunnels?.closeAll()
+    agent?.onVaultLocked()
     sessions?.sessions?.forEach { session ->
         session.controller.clearReconnectCredentials()
         session.splitSession?.controller?.clearReconnectCredentials()

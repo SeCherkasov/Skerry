@@ -1,5 +1,7 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.agent.AgentSessionChannel
+import app.skerry.shared.agent.SshjAgentForwarder
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SshjSftpClient
 import java.io.ByteArrayOutputStream
@@ -22,12 +24,17 @@ import net.schmizz.sshj.transport.TransportException
  * Live sshj connection: exec/shell/SFTP/forwards over one authenticated client. [upstream] holds
  * the ProxyJump hop clients this connection is tunneled through (entry point first, empty for a
  * direct connection); they only live to carry [client]'s traffic and are closed with it.
+ *
+ * [agentForwarder] is present when this target asked for SSH agent forwarding: the interactive
+ * shell then requests it and the forwarder answers the server's agent channels. It dies with the
+ * connection ([disconnect]) — the agent must not stay reachable from a server whose session is gone.
  */
 internal class SshjConnection(
     private val client: SSHClient,
     override val cipher: String?,
     override val serverVersion: String?,
     private val upstream: List<SSHClient> = emptyList(),
+    private val agentForwarder: SshjAgentForwarder? = null,
 ) : SshConnection {
 
     override val isConnected: Boolean
@@ -86,11 +93,27 @@ internal class SshjConnection(
     override suspend fun openShell(size: PtySize, term: String): ShellChannel =
         withContext(Dispatchers.IO) {
             try {
-                openShellChannel(client.startSession(), size, term)
+                openShellChannel(newSession(), size, term)
             } catch (e: IOException) {
                 throw SshConnectionException("Failed to open shell channel", e)
             }
         }
+
+    /**
+     * A session channel for the interactive shell. Without agent forwarding this is sshj's own
+     * `startSession()`; with it, the same channel plus an `auth-agent-req@openssh.com` request,
+     * which has to be sent before the PTY/shell requests (see [AgentSessionChannel]).
+     *
+     * Only the shell gets the agent — one-shot [exec] channels (metrics polling, service scan, the
+     * Mosh bootstrap) run without it, so background machinery can never hand keys to a server.
+     */
+    private fun newSession(): Session {
+        val forwarder = agentForwarder ?: return client.startSession()
+        val session = AgentSessionChannel(client.connection, client.remoteCharset)
+        session.open()
+        forwarder.requestOn(session)
+        return session
+    }
 
     override suspend fun openSftp(): SftpClient = withContext(Dispatchers.IO) {
         try {
@@ -135,6 +158,9 @@ internal class SshjConnection(
         // already-dead socket (full TCP buffer) could hang indefinitely, and this is called from the UI
         // thread on tab close. On timeout, just force-close the client.
         withContext(Dispatchers.IO) {
+            // Before the transport goes down: stop answering agent channels and drop the opener, so
+            // no serving coroutine survives the session that authorized it.
+            agentForwarder?.let { runCatching { it.stop() } }
             withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { client.disconnect() } }
                 ?: runCatching { client.close() }
             // ProxyJump hops die with the session: closing the target client only closes its

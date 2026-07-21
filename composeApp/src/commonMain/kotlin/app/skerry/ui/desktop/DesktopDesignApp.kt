@@ -172,6 +172,7 @@ import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalSshAgent
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
@@ -318,6 +319,9 @@ fun DesktopDesignApp(
     // Update notice (GitHub Releases check + the About toggle). `null` — mock/preview: no notice,
     // the About section hides the toggle.
     updates: app.skerry.ui.update.UpdateNoticeController? = null,
+    // Built-in SSH agent (Settings → SSH agent, per-host agent forwarding). `null` — mock/preview:
+    // the section is static and no session forwards anything. Supplied behind the vault gate.
+    sshAgent: app.skerry.ui.agent.SshAgentController? = null,
     features: FeatureFlags = FeatureFlags(),
     // Called once after vault unlock, before list reload — reloads managers from decrypted records
     // and restores the sync session (supplied by desktop `main`). No-op in mock/preview.
@@ -460,6 +464,7 @@ fun DesktopDesignApp(
         LocalTeams provides teams,
         LocalAi provides ai,
         LocalUpdates provides updates,
+        LocalSshAgent provides sshAgent,
     ) {
         if (vault != null) {
             VaultGate(
@@ -470,7 +475,7 @@ fun DesktopDesignApp(
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.autoLock.idleMs,
                 // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
-                onBeforeLock = { tearDownForLock(tunnels, sessions) },
+                onBeforeLock = { tearDownForLock(tunnels, sessions, sshAgent) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.

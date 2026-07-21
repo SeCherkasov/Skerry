@@ -92,7 +92,9 @@ import app.skerry.ui.generated.resources.conn_field_device
 import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_jump_host
+import app.skerry.ui.generated.resources.conn_field_forward_agent
 import app.skerry.ui.generated.resources.conn_field_keep_alive
+import app.skerry.ui.generated.resources.conn_forward_agent_desc
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
@@ -282,6 +284,12 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         if (form.connectionType == ConnectionType.SSH) {
                             Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { KeepAlivePicker(form) }
                         }
+                    }
+                    // Agent forwarding rides the SSH session channel, so it is SSH-only like
+                    // keep-alive. Off by default: the host may use every key the agent offers.
+                    if (form.connectionType == ConnectionType.SSH) {
+                        Spacer14()
+                        ForwardAgentRow(form)
                     }
                 }
                 Spacer14()

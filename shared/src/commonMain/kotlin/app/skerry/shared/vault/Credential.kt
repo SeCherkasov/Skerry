@@ -57,12 +57,18 @@ sealed interface CredentialSecret {
  * [VaultRecord]'s plaintext metadata must not reveal key names or types (zero-knowledge). For the
  * same reason `toString` redacts [label] and [secret], leaving only [id] (already plaintext in
  * the metadata).
+ *
+ * [agentEnabled] marks the key as available to the built-in SSH agent (`ssh-add` for this vault):
+ * only such a key may be offered to a session with agent forwarding or to a local process on the
+ * agent socket. Meaningless for [CredentialSecret.Password]. Default `false` — the agent starts
+ * empty, so enabling it never retroactively exposes keys stored before the feature existed.
  */
 @Serializable
 data class Credential(
     val id: String,
     val label: String,
     val secret: CredentialSecret,
+    val agentEnabled: Boolean = false,
 ) {
     override fun toString(): String = "Credential(id=$id, label=redacted, secret=redacted)"
 }

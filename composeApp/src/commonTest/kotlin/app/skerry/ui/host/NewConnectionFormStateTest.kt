@@ -91,6 +91,26 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun agent_forwarding_defaults_to_off_travels_the_draft_and_prefills_from_host() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+        assertFalse(f.forwardAgent)
+        f.forwardAgent = true
+        assertTrue(f.toDraft().forwardAgent)
+
+        val host = Host(id = "h1", label = "Web", address = "web", username = "root", forwardAgent = true)
+        assertTrue(NewConnectionFormState.fromHost(host).forwardAgent)
+    }
+
+    @Test
+    fun switching_away_from_ssh_drops_agent_forwarding() {
+        // Only an SSH session channel can carry the agent; Mosh runs its own protocol after the
+        // bootstrap, so leaving the flag on would promise something the profile cannot do.
+        val f = NewConnectionFormState().apply { forwardAgent = true }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.MOSH)
+        assertFalse(f.forwardAgent)
+    }
+
+    @Test
     fun switching_away_from_ssh_drops_the_jump_host() {
         val f = NewConnectionFormState().apply { jumpHostId = "bastion-1" }
         f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.TELNET)

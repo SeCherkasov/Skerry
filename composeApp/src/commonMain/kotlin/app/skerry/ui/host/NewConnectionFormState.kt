@@ -68,6 +68,9 @@ class NewConnectionFormState {
         if (port.trim() == defaultPortFor(connectionType).toString()) {
             port = defaultPortFor(type).toString()
         }
+        // Agent forwarding rides the SSH session channel, so it goes with the jump host when the
+        // profile leaves the SSH family (Mosh runs its own protocol after the bootstrap exec).
+        if (type != ConnectionType.SSH) forwardAgent = false
         if (!type.usesSshAuth) jumpHostId = null
         if (type.isVnc) dropNonVncAuth()
         connectionType = type
@@ -91,6 +94,9 @@ class NewConnectionFormState {
 
     /** Keep-alive cadence for this profile's sessions, seconds (0 = off); see [Host.keepAliveSeconds]. */
     var keepAliveSeconds: Int by mutableStateOf(30)
+
+    /** Forward the built-in SSH agent into this host's shell; see [Host.forwardAgent]. */
+    var forwardAgent: Boolean by mutableStateOf(false)
 
     // Auth: mode plus fields for each kind (kept side by side so switching doesn't lose input).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
@@ -201,6 +207,7 @@ class NewConnectionFormState {
         connectionType = connectionType,
         jumpHostId = jumpHostId,
         keepAliveSeconds = keepAliveSeconds,
+        forwardAgent = forwardAgent,
     )
 
     companion object {
@@ -230,6 +237,7 @@ class NewConnectionFormState {
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId
             keepAliveSeconds = host.keepAliveSeconds
+            forwardAgent = host.forwardAgent
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId

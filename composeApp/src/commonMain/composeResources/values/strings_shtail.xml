@@ -3,6 +3,7 @@
     <string name="shtail_nav_ai">AI</string>
     <string name="shtail_nav_sync">Sync</string>
     <string name="shtail_nav_security">Security</string>
+    <string name="shtail_nav_agent">SSH agent</string>
     <string name="shtail_nav_appearance">Appearance</string>
     <string name="shtail_nav_terminal">Terminal</string>
     <string name="shtail_nav_keyboard">Keyboard</string>

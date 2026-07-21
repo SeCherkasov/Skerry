@@ -13,6 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class VaultHostStoreTest {
 
@@ -108,6 +109,16 @@ class VaultHostStoreTest {
         // Absent in old records -> 30 (backward compatible default, matches the pre-setting behavior).
         VaultHostStore(vault).put(host("plain"))
         assertEquals(30, VaultHostStore(vault).all().first { it.id == "plain" }.keepAliveSeconds)
+    }
+
+    @Test
+    fun `agent forwarding survives persist and reload, defaulting to off`() {
+        val vault = FakeVault()
+        VaultHostStore(vault).put(host("bastion").copy(forwardAgent = true))
+        assertTrue(VaultHostStore(vault).all().single().forwardAgent)
+        // Absent in records written before the agent existed -> off, never a silent opt-in.
+        VaultHostStore(vault).put(host("plain"))
+        assertFalse(VaultHostStore(vault).all().first { it.id == "plain" }.forwardAgent)
     }
 
     @Test

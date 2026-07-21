@@ -17,6 +17,9 @@ import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.RoutingTransport
+import app.skerry.shared.agent.SshAgentActivityLog
+import app.skerry.shared.agent.SshAgentService
+import app.skerry.shared.agent.SshjAgentKeys
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.snippet.VaultSnippetStore
@@ -228,6 +231,17 @@ class MainActivity : FragmentActivity() {
      * OSC 52 server clipboard-write gate (More → Appearance → Terminal): "true"/"false" in
      * `terminal_clipboard_write`. Missing/unreadable → false (off by default). Best-effort, off the UI thread.
      */
+    /** Master switch of the built-in SSH agent (per device, like the desktop pref). */
+    private fun readAgentEnabled(dir: File): Boolean = runCatching {
+        File(dir, "ssh_agent").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeAgentEnabled(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "ssh_agent").writeText(enabled.toString()) }
+        }
+    }
+
     private fun readClipboardWrite(dir: File): Boolean = runCatching {
         File(dir, "terminal_clipboard_write").readText().trim().toBoolean()
     }.getOrDefault(false)
@@ -330,10 +344,28 @@ class MainActivity : FragmentActivity() {
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches").toPath())
         // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the
         // TOFU verifier/known-hosts; Telnet/Serial are stateless (serial unsupported on Android).
+        // Built-in SSH agent: the service is wired into the session transport (and only that one —
+        // the tunnel/probe transport below must never expose keys), while its keys come from the
+        // controller assembled a few lines down, hence the var (same pattern as teamsForSync).
+        var sshAgentController: app.skerry.ui.agent.SshAgentController? = null
+        val agentKeys = SshjAgentKeys({ sshAgentController?.keyMaterial().orEmpty() })
+        val agentService = SshAgentService(agentKeys) { usage -> sshAgentController?.record(usage) }
         val transport = RoutingTransport(
             ssh = SshjTransport(
                 TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+                agent = agentService,
             ),
+        )
+        // Android has no SSH_AUTH_SOCK to expose (no local programs to serve), so the agent here is
+        // forwarding-only: socket = null hides that row and the controller never starts a listener.
+        sshAgentController = app.skerry.ui.agent.SshAgentController(
+            credentials = credentials,
+            isVaultUnlocked = { vault.isUnlocked },
+            socket = null,
+            dropParsedKeys = agentKeys::clear,
+            activityLog = SshAgentActivityLog(clock = { Instant.now().toString() }),
+            initialEnabled = readAgentEnabled(dir),
+            persistEnabled = { writeAgentEnabled(dir, it) },
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         // Host profiles are HOST records in the vault; tree order lives in a layout record. The vault
@@ -440,6 +472,8 @@ class MainActivity : FragmentActivity() {
             tunnels.reload()
             knownHosts.refresh()
             sync.restoreSession()
+            // The agent's keys are vault secrets: it only starts offering them once the vault opens.
+            sshAgentController.onVaultUnlocked()
         }
         // Clears data outside the vault on reset. The vault file is already wiped and locked, so
         // credentials aren't touched here (secrets reload when a new vault is created). Host
@@ -447,6 +481,8 @@ class MainActivity : FragmentActivity() {
         // clears non-vault data and reflects the now-empty vault in the managers.
         onVaultReset = { resetScope ->
             tunnels.closeAll()
+            // The keys the agent was offering were erased with the vault; forget them.
+            sshAgentController.onVaultLocked()
             // Team keys lived in the wiped vault; team vaults can no longer be opened, so lock their in-memory trace.
             teams.lock()
             // Reset wiped the dataKey, so the biometric artifact (`vault.bio`) and the sealed sync
@@ -471,6 +507,7 @@ class MainActivity : FragmentActivity() {
                 writeClipboardWrite(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
+                writeAgentEnabled(dir, false)
             }
             hosts.reload()
             snippets.reload()
@@ -504,6 +541,7 @@ class MainActivity : FragmentActivity() {
             teams = teams,
             securityLog = securityLog,
             localAi = localAi,
+            sshAgent = sshAgentController,
         )
     }
 

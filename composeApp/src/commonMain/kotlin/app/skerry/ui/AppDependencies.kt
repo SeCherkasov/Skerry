@@ -52,4 +52,6 @@ data class AppDependencies(
     val securityLog: SecurityLog? = null,
     /** Local AI: model store + downloader + runtime; `null` for preview/mock without the subsystem. */
     val localAi: LocalAiDeps? = null,
+    /** Built-in SSH agent (key policy, agent socket, activity); `null` if not wired up. */
+    val sshAgent: app.skerry.ui.agent.SshAgentController? = null,
 )

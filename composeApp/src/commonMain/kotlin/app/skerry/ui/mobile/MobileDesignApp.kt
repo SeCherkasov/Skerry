@@ -75,6 +75,7 @@ import app.skerry.ui.app.LocalOpenSftp
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalSshAgent
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
@@ -273,6 +274,8 @@ fun MobileDesignApp(
         LocalSync provides deps.sync,
         // Teams — More → "Team" push screen (sharing hosts/snippets between accounts).
         LocalTeams provides deps.teams,
+        // Built-in SSH agent — More → "SSH agent" push screen and per-host agent forwarding.
+        LocalSshAgent provides deps.sshAgent,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault
@@ -286,7 +289,7 @@ fun MobileDesignApp(
                     autoLockIdleMs = state.autoLock.idleMs,
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
-                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions) },
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sshAgent) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.
@@ -574,6 +577,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Sync -> MobileSyncScreen(state)
         MobileRoute.Ai -> MobileAiScreen(state)
         MobileRoute.Security -> MobileSecurityScreen(state)
+        MobileRoute.Agent -> MobileAgentScreen(state)
         MobileRoute.About -> MobileAboutScreen(state)
     }
 }

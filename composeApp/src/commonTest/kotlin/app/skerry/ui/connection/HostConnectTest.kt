@@ -7,6 +7,8 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 /**
  * Pure helpers wiring a host to a session (host → address/label, keychain secret → auth
@@ -34,6 +36,12 @@ class HostConnectTest {
     fun target_carries_the_keep_alive_interval() {
         assertEquals(120, host().copy(keepAliveSeconds = 120).toTarget().keepAliveSeconds)
         assertEquals(0, host().copy(keepAliveSeconds = 0).toTarget().keepAliveSeconds)
+    }
+
+    @Test
+    fun target_carries_the_agent_forwarding_flag() {
+        assertTrue(host().copy(forwardAgent = true).toTarget().forwardAgent)
+        assertFalse(host().toTarget().forwardAgent)
     }
 
     @Test

@@ -45,6 +45,11 @@ import kotlinx.serialization.Serializable
  *
  * [vncResizeToWindow] remembers the VNC session's "Resize to window" toggle across restarts.
  * VNC-only; toggled from the live session's graphics menu, not the edit form (which preserves it).
+ *
+ * [forwardAgent] forwards the built-in SSH agent into this host's shell (`ssh -A`), so an `ssh` run
+ * on the far side can hop onward with a key that stays in the local vault. SSH-only and default
+ * `false`: while the session lives, that host can use every key the agent offers, so it is a
+ * per-host trust decision — and old saved files read as "off".
  */
 @Serializable
 data class Host(
@@ -61,4 +66,5 @@ data class Host(
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
     val vncResizeToWindow: Boolean = false,
+    val forwardAgent: Boolean = false,
 )

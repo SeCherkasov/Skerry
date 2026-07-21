@@ -47,6 +47,7 @@ import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
+import app.skerry.ui.host.MobileForwardAgentRow
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.secure.SecureScreen
@@ -71,7 +72,9 @@ import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
 import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_jump_host
+import app.skerry.ui.generated.resources.conn_field_forward_agent
 import app.skerry.ui.generated.resources.conn_field_keep_alive
+import app.skerry.ui.generated.resources.conn_forward_agent_desc
 import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_name
@@ -240,6 +243,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 // Keep-alive cadence (desktop parity); 0 = off. SSH-only: Mosh heartbeats on its own.
                 if (form.connectionType == ConnectionType.SSH) {
                     MobileFormField(stringResource(Res.string.conn_field_keep_alive)) { MobileKeepAlivePicker(form) }
+                    Spacer(Modifier.height(14.dp))
+                    // Agent forwarding (desktop parity): SSH-only, off by default.
+                    MobileForwardAgentRow(form)
                     Spacer(Modifier.height(14.dp))
                 }
             } else if (form.connectionType.isVnc) {

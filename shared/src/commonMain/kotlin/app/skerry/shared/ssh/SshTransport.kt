@@ -34,6 +34,12 @@ interface SshTransport {
  * [SshConnection.measureRoundTrip]). Carried inside the target (like [jump]) so auto-reconnect
  * keeps the cadence with no extra plumbing. Default 0 preserves prior call sites: ad-hoc/probe
  * targets spawn no background traffic unless asked to.
+ *
+ * [forwardAgent] asks the server to forward Skerry's built-in SSH agent into the session's shell
+ * (`ssh -A`), so an `ssh`/`git` run on the remote can authenticate onward with a key that stays in
+ * the local vault. SSH-only and off by default: the far end can use every key the agent offers for
+ * as long as the session lives, so it is a per-host decision, and it takes effect only when an
+ * agent is actually wired into the transport.
  */
 data class SshTarget(
     val host: String,
@@ -42,6 +48,7 @@ data class SshTarget(
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jump: SshJump? = null,
     val keepAliveSeconds: Int = 0,
+    val forwardAgent: Boolean = false,
 )
 
 /**

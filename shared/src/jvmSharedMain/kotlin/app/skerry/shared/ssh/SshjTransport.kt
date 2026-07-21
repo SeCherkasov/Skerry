@@ -1,5 +1,8 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.agent.SshAgentOrigin
+import app.skerry.shared.agent.SshAgentService
+import app.skerry.shared.agent.SshjAgentForwarder
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.PrivateKey
@@ -18,9 +21,17 @@ import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
 
-/** Desktop implementation of [SshTransport] over sshj (JVM). */
+/**
+ * Desktop implementation of [SshTransport] over sshj (JVM).
+ *
+ * [agent] is the built-in SSH agent; when a target asks for [SshTarget.forwardAgent] and an agent
+ * is present, the session's shell gets agent forwarding. Null (the default) means no agent is
+ * configured — probe/tunnel transports pass nothing, so "test connection" and background tunnels
+ * never expose keys.
+ */
 class SshjTransport(
     private val hostKeyVerifier: HostKeyVerifier,
+    private val agent: SshAgentService? = null,
 ) : SshTransport {
 
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
@@ -62,7 +73,20 @@ class SshjTransport(
         // `SSH-2.0-` too — substring(8) is the same either way; cosmetic only.)
         val serverVersion = runCatching { client.transport.serverVersion }
             .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
-        return SshjConnection(client, negotiatedCipher.get(), serverVersion, upstream = opened.dropLast(1))
+        // Agent forwarding is registered only after authentication: an unauthenticated server has no
+        // business opening channels back to our keys. The origin is the address the user dialed, so
+        // the activity list can name who asked (in memory only — see SshAgentService).
+        val agentForwarder = agent?.takeIf { target.forwardAgent }?.let { service ->
+            SshjAgentForwarder(client.connection, service, SshAgentOrigin.Session(target.host))
+                .also { client.connection.attach(it) }
+        }
+        return SshjConnection(
+            client,
+            negotiatedCipher.get(),
+            serverVersion,
+            upstream = opened.dropLast(1),
+            agentForwarder = agentForwarder,
+        )
     }
 
     /**

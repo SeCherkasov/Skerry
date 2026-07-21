@@ -27,6 +27,7 @@ data class HostDraft(
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
+    val forwardAgent: Boolean = false,
 )
 
 /**
@@ -77,6 +78,7 @@ class HostManagerController(
                 connectionType = draft.connectionType,
                 jumpHostId = draft.jumpHostId,
                 keepAliveSeconds = draft.keepAliveSeconds,
+                forwardAgent = draft.forwardAgent,
                 // Not a form field — toggled from the live VNC session; a form save must not reset it.
                 vncResizeToWindow = find(id)?.vncResizeToWindow ?: false,
             ),

@@ -32,6 +32,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.app.LocalSecurityLog
+import app.skerry.ui.app.LocalSshAgent
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.SettingsTab
@@ -44,6 +45,7 @@ import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_nav_header
 import app.skerry.ui.generated.resources.shtail_nav_about
+import app.skerry.ui.generated.resources.shtail_nav_agent
 import app.skerry.ui.generated.resources.shtail_nav_ai
 import app.skerry.ui.generated.resources.shtail_nav_appearance
 import app.skerry.ui.generated.resources.shtail_nav_keyboard
@@ -53,7 +55,7 @@ import app.skerry.ui.generated.resources.shtail_nav_terminal
 import app.skerry.ui.vault.VaultGateController
 import org.jetbrains.compose.resources.stringResource
 
-/** Settings panel (760x560 modal): 200dp nav + content with 7 sections (AI/Sync/.../About). */
+/** Settings panel (760x560 modal): 200dp nav + content with 8 sections (AI/Sync/.../About). */
 @Composable
 fun SettingsPanel(state: DesktopDesignState) {
     // Live security controller over shared vault/biometrics/log: password change, biometrics
@@ -100,6 +102,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                         onChangeMasterPassword = { changePwOpen = true },
                         onBiometricToggled = { securityReload++ },
                     )
+                    SettingsTab.Agent -> AgentSection(LocalSshAgent.current)
                     SettingsTab.Keyboard -> KeyboardSection()
                     SettingsTab.About -> AboutSection()
                 }
@@ -162,6 +165,7 @@ private fun SettingsTab.navLabel(): String = when (this) {
     SettingsTab.AI -> stringResource(Res.string.shtail_nav_ai)
     SettingsTab.Sync -> stringResource(Res.string.shtail_nav_sync)
     SettingsTab.Security -> stringResource(Res.string.shtail_nav_security)
+    SettingsTab.Agent -> stringResource(Res.string.shtail_nav_agent)
     SettingsTab.Appearance -> stringResource(Res.string.shtail_nav_appearance)
     SettingsTab.Terminal -> stringResource(Res.string.shtail_nav_terminal)
     SettingsTab.Keyboard -> stringResource(Res.string.shtail_nav_keyboard)

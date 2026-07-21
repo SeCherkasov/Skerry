@@ -9,6 +9,7 @@ val SETTINGS_NAV = listOf(
     SettingsNavItem(SettingsTab.AI, "auto_awesome"),
     SettingsNavItem(SettingsTab.Sync, "sync"),
     SettingsNavItem(SettingsTab.Security, "shield_lock"),
+    SettingsNavItem(SettingsTab.Agent, "key"),
     SettingsNavItem(SettingsTab.Appearance, "palette"),
     SettingsNavItem(SettingsTab.Terminal, "terminal"),
     SettingsNavItem(SettingsTab.Keyboard, "keyboard"),

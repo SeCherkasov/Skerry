@@ -159,6 +159,9 @@ fun main() {
     // Built once outside the content lambda: recomposition must not recreate the controller
     // (a fresh instance would restart its async check and the notice would never settle).
     val updates = if (live) seededUpdates() else null
+    // Live SSH agent so the "SSH agent" settings tab renders real key rows and activity instead of
+    // an empty layout (the section reads the keychain, so it needs the seeded credentials).
+    val sshAgent = if (live && credentials != null) seededAgent(credentials) else null
 
     // Stub window chrome (-Dskerry.screenshot.windowChrome=true): draws the custom window buttons
     // in the titlebar (as in the real undecorated window); drag/minimize/maximize are no-ops offscreen.
@@ -175,7 +178,7 @@ fun main() {
         "unlock" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}, onForgotPassword = {}) } } } }
         "corrupted" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopCorruptedScreen(onReset = {}) } } } }
         "reset" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopResetScreen(onConfirm = {}, onCancel = {}) } } } }
-        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
+        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, sshAgent = sshAgent, windowChrome = windowChrome) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -217,7 +220,11 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     // Key generator/inspector: the Vault tab uses it to compute fingerprints of seeded keys in live mode.
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
     val deps = if (hosts != null) {
-        AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, tunnels = seededTunnels(hosts))
+        AppDependencies(
+            hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator,
+            tunnels = seededTunnels(hosts),
+            sshAgent = credentials?.let { seededAgent(it) },
+        )
     } else {
         AppDependencies()
     }
@@ -490,6 +497,30 @@ private fun seededKnownHosts(): KnownHostsController {
  * `-Dskerry.screenshot.updateAvailable=true` makes the canned newer release visible (status-bar
  * item, About notice, More-row subtitle); without the flag the check finds nothing.
  */
+/**
+ * SSH agent seeded for offscreen renders: on, with the keychain's first key in it, a socket path
+ * and a couple of activity entries, so the section shows every row it has.
+ */
+private fun seededAgent(credentials: CredentialManagerController): app.skerry.ui.agent.SshAgentController {
+    val log = app.skerry.shared.agent.SshAgentActivityLog(clock = { "2026-07-21T09:12:00Z" })
+    log.record(app.skerry.shared.agent.SshAgentUsage(app.skerry.shared.agent.SshAgentOrigin.Session("bastion.internal"), app.skerry.shared.agent.SshAgentAction.Signed, "Deploy key"))
+    log.record(app.skerry.shared.agent.SshAgentUsage(app.skerry.shared.agent.SshAgentOrigin.LocalSocket, app.skerry.shared.agent.SshAgentAction.Listed, null))
+    val socket = object : app.skerry.ui.agent.SshAgentSocket {
+        override val isSupported = true
+        override fun start() = "/run/user/1000/skerry/agent/agent.sock"
+        override fun stop() = Unit
+    }
+    credentials.credentials.firstOrNull()?.let { credentials.setAgentEnabled(it.id, true) }
+    return app.skerry.ui.agent.SshAgentController(
+        credentials = credentials,
+        isVaultUnlocked = { true },
+        socket = socket,
+        activityLog = log,
+        initialEnabled = true,
+        initialSocketEnabled = true,
+    ).also { it.onVaultUnlocked() }
+}
+
 private fun seededUpdates(): app.skerry.ui.update.UpdateNoticeController {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val available = System.getProperty("skerry.screenshot.updateAvailable", "false").toBoolean()

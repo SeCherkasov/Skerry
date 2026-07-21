@@ -60,9 +60,25 @@ class CredentialManagerController(
     /** Creates (if [CredentialDraft.id] == null) or updates a secret; returns the assigned id. */
     fun save(draft: CredentialDraft): String {
         val id = draft.id ?: newId()
-        store.put(Credential(id = id, label = draft.label, secret = draft.toSecret()))
+        store.put(
+            Credential(
+                id = id,
+                label = draft.label,
+                secret = draft.toSecret(),
+                // Not a form field: editing a key must not silently drop it out of (or into) the
+                // agent — that switch lives in Settings → SSH agent.
+                agentEnabled = find(id)?.agentEnabled ?: false,
+            ),
+        )
         credentials = store.all()
         return id
+    }
+
+    /** Put the key in the built-in SSH agent, or take it out ([Credential.agentEnabled]). */
+    fun setAgentEnabled(id: String, enabled: Boolean) {
+        val credential = find(id) ?: return
+        store.put(credential.copy(agentEnabled = enabled))
+        credentials = store.all()
     }
 
     fun delete(id: String) {

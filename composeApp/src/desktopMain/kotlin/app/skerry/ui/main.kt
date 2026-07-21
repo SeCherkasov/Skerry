@@ -23,6 +23,9 @@ import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.agent.SshAgentActivityLog
+import app.skerry.shared.agent.SshAgentService
+import app.skerry.shared.agent.SshjAgentKeys
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
@@ -105,6 +108,17 @@ private fun dataDir(): Path {
 }
 
 /**
+ * Directory holding the SSH agent socket. Prefers `XDG_RUNTIME_DIR` (per-user tmpfs, wiped at
+ * logout — where sockets belong and where a stale one cannot survive a reboot); falls back to the
+ * config directory on systems that do not set it. Either way the directory itself is created 0700
+ * by the listener, which is what keeps other users away from the agent.
+ */
+private fun agentSocketDir(config: Path): Path {
+    val runtime = System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotBlank() }?.let { Path.of(it) }
+    return (runtime?.resolve("skerry") ?: config).resolve("agent")
+}
+
+/**
  * Stable device identifier for vault records (provenance + sync LWW). Generated once and
  * persisted to `device_id` so it survives restarts.
  */
@@ -173,11 +187,20 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // The clock stamps firstSeen/observedAt.
     val knownHostsStore = VaultKnownHostsStore(vault)
     val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
+    // Built-in SSH agent. The service is created before the transport (which forwards it into
+    // sessions) but its keys come from the controller assembled further down — hence the var, as
+    // with reloadManagers/teamsForSync below. Until the controller exists there are no keys, which
+    // is also exactly what an app that has not been unlocked yet should offer.
+    var sshAgentController: app.skerry.ui.agent.SshAgentController? = null
+    val agentKeys = SshjAgentKeys({ sshAgentController?.keyMaterial().orEmpty() })
+    val agentService = SshAgentService(agentKeys) { usage -> sshAgentController?.record(usage) }
     // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the TOFU
-    // verifier/known-hosts; Telnet/Serial are stateless (created internally with defaults).
+    // verifier/known-hosts; Telnet/Serial are stateless (created internally with defaults). Only
+    // this transport gets the agent: probe/tunnel connections below must never expose keys.
     val transport = RoutingTransport(
         ssh = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+            agent = agentService,
         ),
     )
     // "Test connection" from the form uses a separate transport with a read-only verifier: it
@@ -262,6 +285,20 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
         scope = tunnelScope,
     ) { UUID.randomUUID().toString() }
+    // The agent's policy side: which vault keys it offers, the local socket, recent activity. The
+    // master switch and the socket switch are per-device prefs (the socket is a property of THIS
+    // machine), while which keys are in the agent travels with the key record in the vault.
+    sshAgentController = app.skerry.ui.agent.SshAgentController(
+        credentials = credentials,
+        isVaultUnlocked = { vault.isUnlocked },
+        socket = app.skerry.ui.agent.DesktopAgentSocket(agentSocketDir(dir), agentService, tunnelScope),
+        dropParsedKeys = agentKeys::clear,
+        activityLog = SshAgentActivityLog(clock = { Instant.now().toString() }),
+        initialEnabled = prefs.bool("ssh_agent", false),
+        persistEnabled = { prefs.set("ssh_agent", it) },
+        initialSocketEnabled = prefs.bool("ssh_agent_socket", false),
+        persistSocketEnabled = { prefs.set("ssh_agent_socket", it) },
+    )
     // Saved snippets: the command library is SNIPPET records in the vault (commands may contain
     // inline credentials, so they share encryption and E2E sync). Run targets the active terminal.
     val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
@@ -314,6 +351,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         reloadManagers()
         // keep-connected: vault opened means a dataKey exists, so the sync session can be silently restored.
         sync.restoreSession()
+        // The agent's keys live in the vault, so it only starts serving once the vault is open.
+        sshAgentController?.onVaultUnlocked()
     }
     // External cleanup on an irreversible vault reset (forgotten password / corrupted file). The
     // vault file is already erased by the controller (Vault.reset) and now locked, so
@@ -326,6 +365,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // managers. The vault is locked at this point.
     val onVaultReset: (ResetScope) -> Unit = { resetScope ->
         tunnels.closeAll()
+        // The keys the agent was offering were erased with the vault; stop serving and forget them.
+        sshAgentController?.onVaultLocked()
         // Team keys lived in the erased vault, so local team vaults can no longer be opened; lock them.
         teams.lock()
         // The security log refers to the erased vault (password change/biometrics/pairing); on any
@@ -361,7 +402,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         snippets.reload()
         tunnels.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, teams = teams, localAi = localAi)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, teams = teams, localAi = localAi, sshAgent = sshAgentController)
     return DesktopGraph(
         deps = deps,
         securityLog = securityLog,
@@ -478,6 +519,7 @@ fun main(args: Array<String>) {
                     teams = deps.teams,
                     ai = graph.ai,
                     updates = graph.updates,
+                    sshAgent = deps.sshAgent,
                     onVaultUnlocked = graph.onVaultUnlocked,
                     onVaultReset = graph.onVaultReset,
                     windowChrome = windowChrome,

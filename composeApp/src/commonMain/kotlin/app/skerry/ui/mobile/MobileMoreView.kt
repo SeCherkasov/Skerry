@@ -39,6 +39,9 @@ import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.SecurityEvent
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.agent_more_off
+import app.skerry.ui.generated.resources.agent_more_on
+import app.skerry.ui.generated.resources.agent_title
 import app.skerry.ui.generated.resources.appearance_badge_active
 import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
@@ -128,6 +131,7 @@ import app.skerry.ui.app.LocalUpdates
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
 import app.skerry.ui.app.LocalSecurityLog
+import app.skerry.ui.app.LocalSshAgent
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalTunnels
 import app.skerry.ui.app.LocalVault
@@ -188,6 +192,15 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             // "Security" section: master password, biometrics, auto-lock, event log. Live path is
             // behind the gate (vault present); in preview the row is inert (nothing to configure without a vault).
             MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.settings_security_title), null, D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
+            // SSH agent: which vault keys sessions with agent forwarding may use. Live path only
+            // (there is nothing to configure without a vault).
+            val agent = LocalSshAgent.current
+            MoreRow(
+                "key", D.cyanBright, stringResource(Res.string.agent_title),
+                if (agent?.enabled == true) stringResource(Res.string.agent_more_on) else stringResource(Res.string.agent_more_off),
+                D.dim,
+                onClick = if (agent == null) null else { -> state.push(MobileRoute.Agent) },
+            )
             // About: subtitle is the current version, or an amber "Update x.y.z" when a newer
             // release is known (the passive mobile counterpart of the desktop status-bar notice).
             val updateVersion = LocalUpdates.current?.available?.versionLabel

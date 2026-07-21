@@ -23,7 +23,7 @@ import app.skerry.shared.vnc.VncAuth
 fun Host.toTarget(jump: SshJump? = null): SshTarget =
     SshTarget(
         host = address, port = port, username = username, connectionType = connectionType,
-        jump = jump, keepAliveSeconds = keepAliveSeconds,
+        jump = jump, keepAliveSeconds = keepAliveSeconds, forwardAgent = forwardAgent,
     )
 
 /** `user@addr:port` string — the session's tab/title label. */

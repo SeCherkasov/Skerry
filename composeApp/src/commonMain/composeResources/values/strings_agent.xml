@@ -1,0 +1,30 @@
+<resources>
+    <!-- Built-in SSH agent (AgentSection.kt · MobileAgentView.kt) -->
+    <string name="agent_title">SSH agent</string>
+    <string name="agent_subtitle">Hold keys in the vault and let a session — or another program on this machine — sign with them, without ever handing over the key itself.</string>
+    <string name="agent_enable">Enable agent</string>
+    <string name="agent_enable_desc">Off, the agent answers with an empty key list everywhere.</string>
+    <string name="agent_keys">KEYS IN THE AGENT</string>
+    <string name="agent_keys_empty">No keys in the keychain yet. Add a private key or certificate in Vault.</string>
+    <string name="agent_key_private">Private key</string>
+    <string name="agent_key_certificate">Certificate</string>
+    <string name="agent_socket">Agent socket</string>
+    <string name="agent_socket_desc">Serve local programs (ssh, git, scp) over SSH_AUTH_SOCK.</string>
+    <string name="agent_socket_hint">Export this in your shell:</string>
+    <string name="agent_socket_copy">Copy</string>
+    <string name="agent_socket_failed">The socket could not be opened. Check that the config directory is writable.</string>
+    <string name="agent_socket_unsupported">This system has no unix sockets with owner-only access, so the agent socket is unavailable.</string>
+    <string name="agent_activity">RECENT ACTIVITY</string>
+    <string name="agent_activity_none">The agent has not been used yet.</string>
+    <string name="agent_activity_line">%1$s · %2$s · %3$s</string>
+    <string name="agent_activity_listed">Keys listed</string>
+    <string name="agent_activity_signed">Signed</string>
+    <string name="agent_activity_refused">Refused</string>
+    <string name="agent_activity_denied">Server refused forwarding</string>
+    <string name="agent_origin_session">session to %1$s</string>
+    <string name="agent_origin_socket">local program</string>
+    <string name="agent_more_on">On</string>
+    <string name="agent_more_off">Off</string>
+    <string name="agent_socket_section">LOCAL ACCESS</string>
+    <string name="agent_subtitle_mobile">Hold keys in the vault and let a session sign with them, without ever handing over the key itself.</string>
+</resources>
