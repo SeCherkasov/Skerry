@@ -281,7 +281,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 }
                 if (state.showRecent && recent.isNotEmpty()) {
                     RecentSectionHeader()
-                    recent.forEach { host -> key(host.id) { RecentHostRow(host, mono) } }
+                    recent.forEach { host -> key(host.id) { RecentHostRow(host, mono, selectedHostId == host.id) { selectedHostId = host.id } } }
                 }
             } else {
                 RecentSectionHeader()
@@ -435,7 +435,7 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
 }
 
 /** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
-private const val TEAM_COLLAPSE_PREFIX = " team "
+private const val TEAM_COLLAPSE_PREFIX = "team"
 
 /**
  * Team header in the sidebar, modeled on [FolderHeader] (collapse chevron + icon + name + count) to
@@ -491,7 +491,7 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
  * instead. Click reconnects via [LocalConnectHost], same path as clicking a catalog row.
  */
 @Composable
-private fun RecentHostRow(host: Host, mono: FontFamily) {
+private fun RecentHostRow(host: Host, mono: FontFamily, selected: Boolean = false, onSelect: (() -> Unit)? = null) {
     val connect = LocalConnectHost.current
     // Stabilizes the lambda on (host, connect), like catalog rows: without remember it would be
     // recreated on every row recomposition.
@@ -501,7 +501,14 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
             .fillMaxWidth()
             .padding(start = 16.dp)
             .clip(RoundedCornerShape(5.dp))
-            .hostConnectClick(onClick)
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            .hostConnectClick(
+                onClick = {
+                    onSelect?.invoke()
+                    onClick()
+                },
+                onSingleClick = onSelect,
+            )
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -510,7 +517,7 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
         Column(Modifier.weight(1f)) {
             Txt(
                 host.label,
-                color = D.dim, size = 12.sp,
+                color = if (selected) D.cyanBright else D.dim, size = 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Txt(
